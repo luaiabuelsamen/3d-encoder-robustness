@@ -24,12 +24,15 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 #: Ordered so the legend reads as the ablation ladder it is.
 ARM_ORDER = [
     "proprio", "proprio_joints", "rgb", "rgbd", "xyz_cam",
-    "rgbd_unproj", "xyz_real", "rvt", "rgb_aug", "rvt_aug",
+    "dp3_pcd", "dp3_world", "rgbd_unproj", "xyz_real", "rvt",
+    "rgb_aug", "rvt_aug",
 ]
 LABEL = {
     "proprio": "proprio only (blind)",
     "proprio_joints": "proprio + joint angles",
     "xyz_cam": "RGB+XYZ camera frame",
+    "dp3_pcd": "DP3 point cloud, 1 cam",
+    "dp3_world": "DP3 point cloud, 4 cam world",
     "rgb": "RGB, regress",
     "rgbd": "RGB+D, regress",
     "rgbd_unproj": "RGB+D, unproject",
@@ -42,6 +45,8 @@ COLOR = {
     "proprio": "#8a8a8a",
     "proprio_joints": "#c0c0c0",
     "xyz_cam": "#9c4fd9",
+    "dp3_pcd": "#00a0a0",
+    "dp3_world": "#006060",
     "rgb": "#3b7dd8",
     "rgbd": "#7aa9e9",
     "rgbd_unproj": "#e0851f",

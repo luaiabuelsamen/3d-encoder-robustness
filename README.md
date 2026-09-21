@@ -97,73 +97,81 @@ quantised to a millimetre. That is the floor a multi-view method starts from.
 
 ---
 
-## Result 2: the decoder does the work, and canonicalisation buys invariance
+## Result 2: no 3D encoder is robust to all three stresses, and they fail differently
 
-Seed 0, 120 held-out episodes, median next-keypose translation error in mm.
-Every arm shares one backbone, one recipe, one output space.
+Median next-keypose translation error, mm. 120 held-out episodes, 2 seeds
+(3 for the DP3 arms), one backbone and one recipe throughout. Seed 3 of the
+image arms is still training; the table is regenerated from `results/`.
 
-| arm | input | decoder | nominal | θ=30° | ε=2° | ε=5° |
-|---|---|---|---|---|---|---|
-| `proprio` (blind) | — | regress | 23.8 | 23.8 | 23.8 | 23.8 |
-| `rgb` | RGB | regress | 17.8 | 27.5 | 17.8 | 17.8 |
-| `rgbd` | RGB + depth channel | regress | 22.3 | 27.9 | 22.3 | 22.3 |
-| `xyz_cam` | RGB + XYZ, **camera frame** | regress | 18.7 | 24.1 | 18.7 | 18.7 |
-| `rgbd_unproj` | RGB + depth channel | heatmap → unproject | 7.7 | 64.7 | 16.3 | 35.7 |
-| `xyz_real` | RGB + XYZ, world frame | heatmap → unproject | 4.7 | 46.2 | 14.9 | 33.6 |
-| **`rvt`** | canonical virtual views | heatmap → orthographic | **3.6** | **10.0** | 25.2 | 49.0 |
-| *`proprio_joints`* | *joint angles* | regress | *6.2* | *6.2* | *6.2* | *6.2* |
+| encoder | nominal | θ=30° cameras moved | ε=5° calib wrong | c=0.008 depth noise |
+|---|---|---|---|---|
+| proprio only (blind) | 23.6 | 23.6 | 23.6 | 23.6 |
+| RGB, regress | 17.3 | 27.3 | **17.3** | **17.3** |
+| RGB + depth channel, regress | 21.9 | 26.9 | **21.9** | **21.7** |
+| RGB+XYZ camera frame, regress | 13.6 | 28.9 | **13.6** | 17.4 |
+| **DP3 point cloud, 1 cam, camera frame** | 8.3 | 37.0 | **8.3** | **8.9** |
+| **DP3 point cloud, 4 cam, world frame** | 8.8 | **9.1** | 19.9 | **9.6** |
+| RGB+D, heatmap → unproject | 7.5 | 70.1 | 35.5 | 9.4 |
+| RGB+XYZ world frame, heatmap → unproject | 4.8 | 45.6 | 34.8 | 6.4 |
+| **RVT, canonical virtual views** | **3.6** | 11.6 | 54.3 | 22.4 |
+| *proprio + joint angles* (control) | *6.2* | *6.2* | *6.2* | *6.2* |
 
-![sweeps](figures/seed0/fig1_sweeps.png)
+Bold marks an entry that barely moved from nominal. Read down the columns
+rather than across the rows: **every 3D encoder here is robust to some stresses
+and fragile to others, and no two share a profile.**
 
-**Three findings, in order of how much they surprised me.**
+![sweeps](figures/main/fig1_sweeps.png)
 
-**1. Depth as a fourth channel is worse than no depth at all** (22.3 vs 17.8 at
-nominal; 47.6 vs 21.8 mm on grasp keyposes). A convolutional encoder treats it
-as texture. This is the cheap thing people reach for first, and here it costs.
+### Four findings
 
-**2. Almost all of the benefit is in the decoder, not the input.** `rgbd` and
-`rgbd_unproj` receive *identical pixels*. The only difference is whether the
-translation is regressed from a pooled token or read off a per-view heatmap and
-pushed through known calibration. That single change is 22.3 → 7.7 mm, and
-47.6 → 8.0 mm on grasps. If you take one thing from this repository, take that.
+**1. Depth as a fourth channel is worse than no depth.** 21.9 mm against 17.3,
+and 47.6 against 21.8 on grasp keyposes. A convolutional encoder reads it as
+texture. This is the cheapest thing to try and it costs.
 
-**3. Canonicalisation buys viewpoint invariance, and nothing else does.** At
-nominal it looks like a rounding error — 4.7 → 3.6. Move the cameras and
-recalibrate, and it is the entire result: at θ=30°, `rvt` holds 10.0 mm while
-`xyz_real` degrades to 46.2 and `rgbd_unproj` to 64.7. Explicit geometric
-decoding is not enough, because the *features* are still viewpoint-dependent.
-This is RVT's actual contribution and it only shows up under the stress it was
-designed for.
+**2. The decoder does most of the work, not the input.** `RGB + depth channel,
+regress` and `RGB+D, heatmap → unproject` consume *identical pixels*. The only
+difference is whether the translation is regressed from a pooled token or read
+off a per-view heatmap and pushed through known calibration: 21.9 → 7.5 mm.
+If you take one thing from this repository, take that.
 
-**And the cost, which is the other half of the story.** Every arm that consumes
-extrinsics collapses when they are wrong, and the canonicalised arm collapses
-fastest because calibration enters its *input* as well as its decode: `rvt`
-goes 3.6 → 14.4 → 25.2 mm at ε = 0, 1, 2°. **At 2° of calibration error, an
-RVT-style policy is worse than ignoring the cameras entirely** (25.2 vs 23.8).
-The arms that never touch an extrinsic — `rgb`, `rgbd`, `xyz_cam` — are exactly
-flat along that axis, which is also a live check that the axes are independent
-in trained models and not just in the renderer.
+**3. An unordered point set is more viewpoint-invariant than canonical
+re-rendering.** Under a 30° rig move with correct extrinsics, the DP3 world
+cloud is flat (8.8 → 9.1) while RVT degrades (3.6 → 11.6) and the real-view
+geometric decoders collapse entirely (45.6, 70.1). Re-rendering is canonical in
+*pose* but reintroduces a sampling grid, and the grid resamples differently as
+coverage changes. A point set has no grid to resample.
 
-Result 1 predicted that crossover at ε ≈ 1.5–2° from the rig geometry alone,
-before any of these policies existed. It lands between 1° and 2°.
+**4. RVT is by far the most depth-noise-sensitive 3D encoder.** 3.6 → 22.4 mm,
+a six-fold degradation, where the world-frame point cloud goes 8.8 → 9.6 and
+`xyz_real` barely moves at 4.8 → 6.4. Rasterising a noisy cloud onto a fixed
+grid compounds the error; consuming it as a set does not. Combined with
+finding 3 this is the trade canonical re-rendering actually makes: it buys
+viewpoint invariance and pays in sensitivity to everything that corrupts the
+geometry it is rendering.
 
-**So which should you build?** Below about 1° of calibration error, canonical
-world-frame views, by a wide margin (3.6 vs 18.7 mm). Above about 2°, the
-camera frame, which gives up accuracy but cannot be miscalibrated. That is a
-number you can measure with a tape measure and a checkerboard before you choose
-an architecture.
+### So which should you build?
 
-*(One caveat worth stating: `xyz_cam` differs from `xyz_real` in both frame and
-decoder. That confound is intrinsic rather than sloppy — you cannot decode to a
-world-frame action through explicit geometry without extrinsics somewhere, so a
-camera-frame policy must learn the camera-to-robot map implicitly.)*
+There is no single answer, which is the point.
 
-*(And a warning about benchmarks: `proprio_joints`, which sees no cameras at
-all, beats `rgb`, `rgbd`, `xyz_cam` and `rgbd_unproj`. Scripted demonstrations
-are a deterministic function of the scene, so joint angles leak the answer. Any
-3D-versus-2D comparison run this way with joint-angle proprioception is
-measuring almost nothing — which is why the other arms get PerAct's four
-numbers instead.)*
+| your situation | use |
+|---|---|
+| cameras fixed, calibration maintained | canonical views (RVT) — best nominal by 2x |
+| cameras move, calibration follows | world-frame point cloud — flat across 30° |
+| calibration uncertain or unmaintained | camera-frame point cloud — flat across 10° |
+| depth noisy or sensor cheap | anything but canonical re-rendering |
+| no depth at all | RGB regression, and do not bolt depth on as a channel |
+
+Result 1 predicted the calibration crossover from rig geometry alone, before
+any of these policies existed. The camera-frame cloud is flat along ε at 8.3 mm
+throughout, so it wins from ε ≈ 0 upward — one camera with no calibration
+matches four fused cameras, and stays matched while they degrade.
+
+*(Benchmark caveat: `proprio_joints`, which sees no cameras, scores 6.2 mm —
+better than five of the eight sighted encoders. Scripted demonstrations are a
+deterministic function of the scene, so joint angles leak the answer. Any
+3D-versus-2D comparison run on scripted data with joint-angle proprioception is
+measuring almost nothing, which is why every other arm gets PerAct's four
+low-dimensional numbers instead.)*
 
 ---
 

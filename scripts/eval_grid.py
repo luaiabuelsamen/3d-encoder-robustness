@@ -73,12 +73,27 @@ def grid(axes: str) -> list[Condition]:
     return out
 
 
-def load_models(runs: pathlib.Path, device: str, image: int):
+def load_models(runs: pathlib.Path, device: str, image: int, require_complete: bool = True):
+    """Load finished checkpoints only.
+
+    Training checkpoints at every evaluation so a long run survives being
+    interrupted, which means a directory can hold a half-trained model that
+    looks exactly like a finished one. Scoring those alongside completed arms
+    would silently compare 500 steps against 2500 and read as an architecture
+    difference.
+    """
     models = []
     for d in sorted(runs.iterdir()):
         ckpt = d / "model.pt"
         if not ckpt.is_file():
             continue
+        hist = d / "history.json"
+        if require_complete and hist.is_file():
+            done = json.loads(hist.read_text())
+            if done.get("steps_done", 0) < done.get("steps_planned", 1):
+                print(f"  skipping {d.name}: only {done.get('steps_done')} of "
+                      f"{done.get('steps_planned')} steps", flush=True)
+                continue
         blob = torch.load(ckpt, map_location=device, weights_only=False)
         spec = ARMS[blob["arm"]]
         m = MultiViewPolicy(
@@ -106,6 +121,8 @@ def main() -> None:
     p.add_argument("--axes", default="theta,eps,noise,cross")
     p.add_argument("--limit-episodes", type=int, default=0)
     p.add_argument("--allow-cpu", action="store_true")
+    p.add_argument("--include-partial", action="store_true",
+                   help="also score checkpoints that have not finished training")
     a = p.parse_args()
 
     dev = pick_device(allow_cpu=a.allow_cpu)
@@ -115,7 +132,7 @@ def main() -> None:
     samples = build_samples(eps, np.random.default_rng(2024), per_segment=1)
     scene = MultiCamScene(seed=4242, image_size=a.image)
 
-    models = load_models(a.runs, dev, a.image)
+    models = load_models(a.runs, dev, a.image, require_complete=not a.include_partial)
     if not models:
         sys.exit(f"no checkpoints under {a.runs}")
     print(f"{len(models)} checkpoints, {len(samples)} test samples from {len(eps)} episodes")
