@@ -1,20 +1,25 @@
 """Run trained arms on the actual task, not just on the error metric.
 
-A millimetre figure is only interesting if it converts into something a robot
-does or fails to do. Here the policy drives the arm: at each step it observes
-the scene through the rig under a stated condition, predicts the next keypose
-and gripper state, and a low-level controller executes it. Nothing about the
-task is given away -- the policy chooses every waypoint and decides when to
-close and when to open.
+A millimetre figure only matters if it converts into something a robot does or
+fails to do. Here the policy drives the arm: at every step it observes the scene
+through the rig under a stated condition, predicts the next keypose and gripper
+state, and a shared low-level controller executes it. The policy chooses every
+waypoint and decides when to close and when to open.
 
-What is *not* the policy's job, and is therefore shared by every arm, is the
-low-level grasp: when the policy commands a close, the same contact-seeking
-routine the scripted expert uses runs. That is the division RVT itself assumes
-(a keypose policy on top of a motion planner), and putting it anywhere else
-would measure the grip controller rather than the representation.
+Two references run under the *identical* wrapper, because a policy's failure
+means nothing without them:
 
-The scripted expert is run under the identical protocol at every condition. A
-policy failure only means something if the expert succeeds there.
+* **oracle keyposes** -- the demonstration's own recorded keyposes, replayed
+  through this executor on the same scene. If the oracle cannot place the block,
+  the executor is broken and no policy number from it is worth reading.
+* **the scripted expert** -- its own full routine, which is the ceiling.
+
+One thing the executor knows that the policy does not: the approach to a grasp
+is made with the tool frame set to the midpoint of the OPEN jaw gap rather than
+the TCP. Descending on the TCP drives the fixed pad down the side of the block
+at tens of newtons before the jaws ever close. The offset uses the *nominal*
+block half-width, not the episode's actual one, so it is information a deployed
+system would have and is identical for every arm and both references.
 """
 
 from __future__ import annotations
@@ -31,23 +36,79 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from rvt_lerobot.device import pick_device  # noqa: E402
 from rvt_lerobot.data.batching import make_images  # noqa: E402
-from rvt_lerobot.data.collect_study import GRIP_OPEN_THRESHOLD  # noqa: E402
+from rvt_lerobot.data.collect_study import GRIP_OPEN_THRESHOLD, run_episode  # noqa: E402
 from rvt_lerobot.data.views import Condition  # noqa: E402
 from rvt_lerobot.envs.multicam import MultiCamScene  # noqa: E402
 from rvt_lerobot.evaluate import rot6d_to_matrix  # noqa: E402
 from rvt_lerobot.models.policy import ARMS, MultiViewPolicy  # noqa: E402
 from rvt_lerobot.render import rig as R  # noqa: E402
 from rvt_lerobot.render.noise import apply_depth_noise  # noqa: E402
-from rvt_lerobot.vendor.so101_expert import HOME, ScriptedExpert, _Waypoints  # noqa: E402
-from rvt_lerobot.vendor.so101_scene import JAW_OPEN, JAW_SHUT  # noqa: E402
+from rvt_lerobot.vendor.so101_expert import ScriptedExpert, _Waypoints  # noqa: E402
+from rvt_lerobot.vendor.so101_scene import JAW_OPEN, JAW_SHUT, TABLE_TOP  # noqa: E402
 
-#: Demonstrations run to 11 keyframes; a little headroom lets a policy recover
-#: from a wasted step without letting one loop forever.
+#: Demonstrations run to 11 keyframes; headroom lets a policy waste a step
+#: without letting one loop forever.
 MAX_KEYPOSES = 14
 
+#: Mid-range of the domain randomisation's block half-width. Used for the
+#: approach tool offset -- see the module docstring.
+NOMINAL_HALF_WIDTH = 0.008
 
-def observe(scene: MultiCamScene, cond: Condition, rng) -> dict[str, torch.Tensor]:
-    """One observation batch of size 1, under the stated condition."""
+#: The fixed pad's inner face, and how far the pads reach below the gap
+#: midpoint. Both are geometry of this gripper, measured in the source project.
+FIXED_PAD_X = 0.0116
+PAD_REACH = 0.0294
+
+
+def approach_tool(scene) -> np.ndarray:
+    """Tool frame for descending with the jaws open, biased toward the fixed pad."""
+    gap = scene.open_gap_local.copy()
+    gap[0] = FIXED_PAD_X - NOMINAL_HALF_WIDTH - 0.006
+    return gap
+
+
+class Executor:
+    """Turns a stream of (position, yaw, gripper) keyposes into robot motion."""
+
+    def __init__(self, scene) -> None:
+        self.scene = scene
+        self.peak = 0.0
+        self._z0 = float(scene.block_pos()[2])
+        self.way = _Waypoints(scene, self._track)
+        self.jaw_open = True
+
+    def _track(self, s) -> None:
+        self.peak = max(self.peak, float(s.block_pos()[2]) - self._z0)
+
+    def step(self, pos: np.ndarray, yaw: float, want_open: bool) -> None:
+        s = self.scene
+        if self.jaw_open and not want_open:
+            grasp_z = max(TABLE_TOP + PAD_REACH + 0.002, float(pos[2]))
+            target = np.array([pos[0], pos[1], grasp_z])
+            self.way.move(target, jaw=JAW_OPEN, yaw=yaw, frames=50,
+                          tool_local=approach_tool(s))
+            self.way.set_jaw(JAW_SHUT, frames=30, settle=12)
+            self.jaw_open = False
+        elif not self.jaw_open and want_open:
+            self.way.move(pos, jaw=JAW_SHUT, yaw=yaw, frames=45, settle=6)
+            self.way.set_jaw(JAW_OPEN, frames=22, settle=10)
+            self.jaw_open = True
+        else:
+            self.way.move(pos, jaw=JAW_OPEN if self.jaw_open else JAW_SHUT,
+                          yaw=yaw, frames=45, settle=6)
+
+    def outcome(self) -> dict:
+        s = self.scene
+        picked = self.peak > 0.03
+        return {
+            "picked": bool(picked),
+            "placed": bool(picked and s.block_in_box() and not s.crushed),
+            "peak_lift_mm": float(self.peak * 1000),
+        }
+
+
+def observe(scene: MultiCamScene, cond: Condition, rng, device: str) -> dict:
+    """One batch-of-one observation under the stated condition."""
     obs = scene.capture()
     cams = R.ALL_CAMERAS
     reported = {c: obs[c].T for c in cams}
@@ -55,82 +116,63 @@ def observe(scene: MultiCamScene, cond: Condition, rng) -> dict[str, torch.Tenso
         reported.update(
             R.miscalibrate({c: obs[c].T for c in R.MOVABLE_CAMERAS}, cond.eps_deg, rng)
         )
-    rgb = np.stack([obs[c].rgb for c in cams])[None]
     depth = np.stack(
         [apply_depth_noise(obs[c].depth, cond.noise_c, rng, far=R.FAR) for c in cams]
     )[None]
-    return {
-        "rgb": torch.from_numpy(rgb),
+    out = {
+        "rgb": torch.from_numpy(np.stack([obs[c].rgb for c in cams])[None]),
         "depth_mm": torch.from_numpy(np.clip(depth * 1000, 0, 65535).astype(np.int32)),
         "K": torch.from_numpy(np.stack([obs[c].K for c in cams])[None].astype(np.float32)),
         "T": torch.from_numpy(np.stack([reported[c] for c in cams])[None].astype(np.float32)),
     }
+    return {k: v.to(device) for k, v in out.items()}
 
 
-def rollout(scene: MultiCamScene, model, cond: Condition, rng, device: str, image: int) -> dict:
-    """Drive one episode with the policy. Returns what happened."""
+def policy_rollout(scene, model, cond, rng, device, image) -> dict:
     s = scene.scene
-    s.reset()
-    z0 = float(s.block_pos()[2])
-    peak = 0.0
-
-    def track(sc):
-        nonlocal peak
-        peak = max(peak, float(sc.block_pos()[2]) - z0)
-
-    way = _Waypoints(s, track)
-    expert = ScriptedExpert(s)
-    jaw = JAW_OPEN
-    was_open = True
-    steps = 0
-
+    ex = Executor(s)
     for _ in range(MAX_KEYPOSES):
-        batch = {k: v.to(device) for k, v in observe(scene, cond, rng).items()}
+        batch = observe(scene, cond, rng, device)
         proprio = torch.tensor(
             np.concatenate([s.data.qpos[:6], [s.data.ctrl[5]]])[None], dtype=torch.float32
         ).to(device)
         with torch.no_grad():
-            images = make_images(model.spec, batch, virtual_size=image)
-            out = model(images, proprio, calib=batch)
-        pos = out["pos"][0].cpu().numpy().astype(float)
-        rot = rot6d_to_matrix(out["rot6"])[0].cpu().numpy()
-        want_open = bool(out["grip_logit"][0].item() > 0)
-        # the IK takes a heading for the jaw's local X, which is the closing
-        # axis; that is exactly the first column of the predicted rotation
+            out = model(make_images(model.spec, batch, virtual_size=image), proprio, calib=batch)
+        pos = out["pos"][0].double().cpu().numpy()
+        rot = rot6d_to_matrix(out["rot6"])[0].double().cpu().numpy()
+        # solve_ik aims the jaw's local X -- the closing axis -- along a heading,
+        # which is exactly the first column of the predicted rotation
         yaw = float(np.arctan2(rot[1, 0], rot[0, 0]))
-
-        if want_open == was_open:
-            way.move(pos, jaw=jaw, yaw=yaw, frames=40, settle=6)
-        elif not want_open:
-            # commanded close: descend to the predicted pose with the jaws open,
-            # then hand over to the shared low-level grasp
-            way.move(pos, jaw=JAW_OPEN, yaw=yaw, frames=40, settle=6)
-            expert_cfg = expert.config
-            way.close_until_contact(
-                target=expert_cfg.grip_newtons if hasattr(expert_cfg, "grip_newtons") else None
-            ) if False else way.set_jaw(JAW_SHUT, frames=30, settle=12)
-            jaw = JAW_SHUT
-        else:
-            way.move(pos, jaw=jaw, yaw=yaw, frames=40, settle=6)
-            way.set_jaw(JAW_OPEN, frames=25, settle=10)
-            jaw = JAW_OPEN
-        was_open = want_open
-        steps += 1
-        if s.block_in_box() and want_open:
+        want_open = bool(out["grip_logit"][0].item() > 0)
+        ex.step(pos, yaw, want_open)
+        if s.block_in_box() and want_open and not ex.jaw_open is False:
             break
-
-    return {
-        "picked": bool(peak > 0.02),
-        "placed": bool(s.block_in_box() and not s.crushed),
-        "peak_lift_mm": peak * 1000,
-        "steps": steps,
-    }
+    return ex.outcome()
 
 
-def expert_rollout(scene: MultiCamScene) -> dict:
-    """The paired working reference, on the same scene, at the same moment."""
-    r = ScriptedExpert(scene.scene).run()
-    return {"picked": bool(r.picked), "placed": bool(r.placed), "peak_lift_mm": float("nan"), "steps": -1}
+def oracle_rollout(scene, episode) -> dict:
+    """Replay a demonstration's own keyposes through the same executor."""
+    ex = Executor(scene.scene)
+    for k in episode.keyframes:
+        rot = episode.jaw_rot[k]
+        ex.step(
+            episode.tcp[k].astype(float),
+            float(np.arctan2(rot[1, 0], rot[0, 0])),
+            bool(episode.jaw_cmd[k] > GRIP_OPEN_THRESHOLD),
+        )
+    return ex.outcome()
+
+
+def snapshot_model(scene):
+    m, ids = scene.model, scene.ids
+    return (m.geom_size[ids.block_geom].copy(), float(m.body_mass[ids.block]),
+            m.geom_friction[ids.block_geom].copy(), m.body_pos[ids.box].copy())
+
+
+def restore_model(scene, snap):
+    m, ids = scene.model, scene.ids
+    m.geom_size[ids.block_geom], m.body_mass[ids.block] = snap[0], snap[1]
+    m.geom_friction[ids.block_geom], m.body_pos[ids.box] = snap[2], snap[3]
 
 
 def main() -> None:
@@ -138,7 +180,7 @@ def main() -> None:
     p.add_argument("--runs", type=pathlib.Path, default=pathlib.Path("runs"))
     p.add_argument("--arms", default="rgb,xyz_real,rvt")
     p.add_argument("--seeds", default="0")
-    p.add_argument("--episodes", type=int, default=40)
+    p.add_argument("--episodes", type=int, default=30)
     p.add_argument("--image", type=int, default=96)
     p.add_argument("--conditions", default="0,0,0;20,0,0;0,5,0;0,0,0.008")
     p.add_argument("--out", type=pathlib.Path, default=pathlib.Path("results/closed_loop.json"))
@@ -151,22 +193,39 @@ def main() -> None:
         t, e, c = (float(x) for x in triple.split(","))
         conds.append(Condition(theta_deg=t, eps_deg=e, noise_c=c, seed=31))
 
-    rows = []
+    rows: list[dict] = []
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    for cond in conds:
-        # the paired reference first, so a bad condition is caught before any
-        # policy is blamed for it
-        scene = MultiCamScene(seed=900, image_size=a.image)
-        rig_rng = np.random.default_rng(31)
-        exp = [expert_rollout(scene) for _ in range(a.episodes)]
-        rows.append({
-            "arm": "scripted_expert", "seed": -1, "theta": cond.theta_deg,
-            "eps": cond.eps_deg, "noise": cond.noise_c,
-            "placed": float(np.mean([r["placed"] for r in exp])),
-            "picked": float(np.mean([r["picked"] for r in exp])), "n": a.episodes,
-        })
-        print(f"{cond.name}  expert placed {rows[-1]['placed']:.2f}", flush=True)
 
+    def record(arm, seed, cond, results):
+        rows.append({
+            "arm": arm, "seed": seed, "theta": cond.theta_deg, "eps": cond.eps_deg,
+            "noise": cond.noise_c, "n": len(results),
+            "picked": float(np.mean([r["picked"] for r in results])),
+            "placed": float(np.mean([r["placed"] for r in results])),
+        })
+        print(f"  {arm:16s} s{seed:<2d} picked {rows[-1]['picked']:.2f} "
+              f"placed {rows[-1]['placed']:.2f}", flush=True)
+        a.out.write_text(json.dumps(rows, indent=1))
+
+    # --- the two references, once: neither depends on the sensing condition ---
+    scene = MultiCamScene(seed=900, image_size=a.image)
+    expert = ScriptedExpert(scene.scene)
+    print("references (condition-independent):", flush=True)
+    exp_res, oracle_res = [], []
+    for _ in range(a.episodes):
+        ep = run_episode(None, expert)
+        exp_res.append({"picked": ep.picked, "placed": ep.placed})
+        snap = snapshot_model(scene.scene)
+        scene.scene.reset(block_xy=(ep.meta["block_x"], ep.meta["block_y"]),
+                          block_yaw=ep.meta["block_yaw"])
+        restore_model(scene.scene, snap)
+        oracle_res.append(oracle_rollout(scene, ep))
+    base = Condition(seed=31)
+    record("scripted_expert", -1, base, exp_res)
+    record("oracle_keyposes", -1, base, oracle_res)
+
+    for cond in conds:
+        print(f"\n{cond.name}", flush=True)
         for arm in a.arms.split(","):
             for seed in (int(s) for s in a.seeds.split(",")):
                 ckpt = a.runs / f"{arm}_s{seed}" / "model.pt"
@@ -174,29 +233,22 @@ def main() -> None:
                     print(f"  missing {ckpt}")
                     continue
                 blob = torch.load(ckpt, map_location=device, weights_only=False)
-                model = MultiViewPolicy(ARMS[arm], image_size=a.image).to(device)
+                model = MultiViewPolicy(
+                    ARMS[arm], image_size=blob.get("image", a.image),
+                    patch=blob.get("patch", 12),
+                ).to(device)
                 model.load_state_dict(blob["state_dict"])
                 model.eval()
                 scene = MultiCamScene(seed=900, image_size=a.image)
+                rng = np.random.default_rng(31)
                 res = []
-                for ep in range(a.episodes):
-                    scene.set_rig(R.perturb_rig(R.NOMINAL_RIG, cond.theta_deg, rig_rng))
-                    res.append(rollout(scene, model, cond, rig_rng, device, a.image))
-                rows.append({
-                    "arm": arm, "seed": seed, "theta": cond.theta_deg,
-                    "eps": cond.eps_deg, "noise": cond.noise_c,
-                    "placed": float(np.mean([r["placed"] for r in res])),
-                    "picked": float(np.mean([r["picked"] for r in res])), "n": a.episodes,
-                })
-                print(
-                    f"  {arm:12s} s{seed}  picked {rows[-1]['picked']:.2f}  "
-                    f"placed {rows[-1]['placed']:.2f}",
-                    flush=True,
-                )
-                a.out.write_text(json.dumps(rows, indent=1))
+                for _ in range(a.episodes):
+                    scene.scene.reset()
+                    scene.set_rig(R.perturb_rig(R.NOMINAL_RIG, cond.theta_deg, rng))
+                    res.append(policy_rollout(scene, model, cond, rng, device, a.image))
+                record(arm, seed, cond, res)
 
-    a.out.write_text(json.dumps(rows, indent=1))
-    print(f"wrote {a.out}")
+    print(f"\nwrote {a.out}")
 
 
 if __name__ == "__main__":

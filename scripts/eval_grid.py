@@ -81,7 +81,9 @@ def load_models(runs: pathlib.Path, device: str, image: int):
             continue
         blob = torch.load(ckpt, map_location=device, weights_only=False)
         spec = ARMS[blob["arm"]]
-        m = MultiViewPolicy(spec, image_size=blob.get("image", image)).to(device)
+        m = MultiViewPolicy(
+            spec, image_size=blob.get("image", image), patch=blob.get("patch", 12)
+        ).to(device)
         m.load_state_dict(blob["state_dict"])
         m.eval()
         models.append((blob["arm"], blob["seed"], m))
