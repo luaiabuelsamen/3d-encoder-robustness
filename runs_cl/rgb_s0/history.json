@@ -1,0 +1,38 @@
+{
+  "arm": "rgb",
+  "seed": 0,
+  "params": 2976202,
+  "steps_done": 1000,
+  "steps_planned": 2500,
+  "fingerprint": {
+    "proprio_dim": 4,
+    "image": 96,
+    "patch": 16,
+    "per_segment": 2,
+    "steps": 2500,
+    "batch": 32,
+    "home_transition": true
+  },
+  "history": [
+    {
+      "trans_mm_median_grasp": 46.999244689941406,
+      "n_grasp": 60,
+      "trans_mm_median_release": 20.12038230895996,
+      "n_release": 60,
+      "trans_mm_median_transit": 28.419191360473633,
+      "n_transit": 543,
+      "n": 663,
+      "trans_mm_mean": 33.85846710205078,
+      "trans_mm_median": 28.223024368286133,
+      "trans_mm_p90": 64.16619110107422,
+      "rot_deg_median": 22.000892639160156,
+      "grip_acc": 0.9879336357116699,
+      "success_10mm": 0.048265460030165915,
+      "success_20mm": 0.29260935143288086,
+      "success_50mm": 0.7828054298642534,
+      "step": 1000,
+      "loss": 0.05742838978767395,
+      "seconds": 1376.8647997379303
+    }
+  ]
+}

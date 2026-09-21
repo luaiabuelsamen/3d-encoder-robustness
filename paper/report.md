@@ -160,6 +160,28 @@ being rendered.** It is the most accurate choice when the geometry is clean and
 the worst when it is not, and "clean" is a property of the deployment, not of
 the method.
 
+### The two axes together
+
+Sweeping camera motion and depth noise as a product, median mm (the clean,
+static corner is measured in the 1-D sweeps above):
+
+| encoder | best cell | worst cell | spread |
+|---|---|---|---|
+| point cloud, 4 cam world | 9.5 | 11.0 | **1.5** |
+| RVT canonical views | 7.3 | 37.0 | 29.7 |
+| point cloud, 1 cam camera frame | 9.1 | 39.6 | 30.5 |
+| RGB+XYZ world → unproject | 7.2 | 53.0 | 45.8 |
+| RGB, regress | 18.8 | 29.2 | 10.4 |
+
+**The world-frame point cloud is flat over the whole plane.** RVT is ahead only
+in the clean, static corner: by c = 0.002 it has already been passed (9.6
+against 9.5) and at c = 0.008 it is beaten more than twofold (24.8 against
+10.5), at every θ.
+
+This is the practical form of the finding. The encoder with the best nominal
+number is not the encoder to deploy unless the deployment is as clean as the
+benchmark, and a benchmark run only at nominal cannot tell you which is which.
+
 A practitioner's table falls out:
 
 | situation | encoder |
