@@ -25,10 +25,9 @@ This study takes them apart on one task, with one backbone, one training recipe,
 and one output space, and then stresses all of it along three axes that a real
 deployment actually travels.
 
-> **Status.** Apparatus complete and self-tested; training and the evaluation
-> grid in progress. Numbers below are filled in from `results/` as they land,
-> and `results/findings.md` is generated, not written — including the
-> comparisons that fail to resolve.
+> **Status.** Apparatus complete and self-tested. Results below are **seed 0 of
+> 3**; seeds 1–2 and the depth-noise axis are running. `results/findings.md` is
+> generated, not written — including the comparisons that fail to resolve.
 
 ---
 
@@ -95,6 +94,76 @@ twentyfold range of ε**. Three consequences:
 Note the ε = 0 row: the cameras already disagree by 10.2 mm with *perfect*
 calibration, because each sees a different surface of the block and depth is
 quantised to a millimetre. That is the floor a multi-view method starts from.
+
+---
+
+## Result 2: the decoder does the work, and canonicalisation buys invariance
+
+Seed 0, 120 held-out episodes, median next-keypose translation error in mm.
+Every arm shares one backbone, one recipe, one output space.
+
+| arm | input | decoder | nominal | θ=30° | ε=2° | ε=5° |
+|---|---|---|---|---|---|---|
+| `proprio` (blind) | — | regress | 23.8 | 23.8 | 23.8 | 23.8 |
+| `rgb` | RGB | regress | 17.8 | 27.5 | 17.8 | 17.8 |
+| `rgbd` | RGB + depth channel | regress | 22.3 | 27.9 | 22.3 | 22.3 |
+| `xyz_cam` | RGB + XYZ, **camera frame** | regress | 18.7 | 24.1 | 18.7 | 18.7 |
+| `rgbd_unproj` | RGB + depth channel | heatmap → unproject | 7.7 | 64.7 | 16.3 | 35.7 |
+| `xyz_real` | RGB + XYZ, world frame | heatmap → unproject | 4.7 | 46.2 | 14.9 | 33.6 |
+| **`rvt`** | canonical virtual views | heatmap → orthographic | **3.6** | **10.0** | 25.2 | 49.0 |
+| *`proprio_joints`* | *joint angles* | regress | *6.2* | *6.2* | *6.2* | *6.2* |
+
+![sweeps](figures/seed0/fig1_sweeps.png)
+
+**Three findings, in order of how much they surprised me.**
+
+**1. Depth as a fourth channel is worse than no depth at all** (22.3 vs 17.8 at
+nominal; 47.6 vs 21.8 mm on grasp keyposes). A convolutional encoder treats it
+as texture. This is the cheap thing people reach for first, and here it costs.
+
+**2. Almost all of the benefit is in the decoder, not the input.** `rgbd` and
+`rgbd_unproj` receive *identical pixels*. The only difference is whether the
+translation is regressed from a pooled token or read off a per-view heatmap and
+pushed through known calibration. That single change is 22.3 → 7.7 mm, and
+47.6 → 8.0 mm on grasps. If you take one thing from this repository, take that.
+
+**3. Canonicalisation buys viewpoint invariance, and nothing else does.** At
+nominal it looks like a rounding error — 4.7 → 3.6. Move the cameras and
+recalibrate, and it is the entire result: at θ=30°, `rvt` holds 10.0 mm while
+`xyz_real` degrades to 46.2 and `rgbd_unproj` to 64.7. Explicit geometric
+decoding is not enough, because the *features* are still viewpoint-dependent.
+This is RVT's actual contribution and it only shows up under the stress it was
+designed for.
+
+**And the cost, which is the other half of the story.** Every arm that consumes
+extrinsics collapses when they are wrong, and the canonicalised arm collapses
+fastest because calibration enters its *input* as well as its decode: `rvt`
+goes 3.6 → 14.4 → 25.2 mm at ε = 0, 1, 2°. **At 2° of calibration error, an
+RVT-style policy is worse than ignoring the cameras entirely** (25.2 vs 23.8).
+The arms that never touch an extrinsic — `rgb`, `rgbd`, `xyz_cam` — are exactly
+flat along that axis, which is also a live check that the axes are independent
+in trained models and not just in the renderer.
+
+Result 1 predicted that crossover at ε ≈ 1.5–2° from the rig geometry alone,
+before any of these policies existed. It lands between 1° and 2°.
+
+**So which should you build?** Below about 1° of calibration error, canonical
+world-frame views, by a wide margin (3.6 vs 18.7 mm). Above about 2°, the
+camera frame, which gives up accuracy but cannot be miscalibrated. That is a
+number you can measure with a tape measure and a checkerboard before you choose
+an architecture.
+
+*(One caveat worth stating: `xyz_cam` differs from `xyz_real` in both frame and
+decoder. That confound is intrinsic rather than sloppy — you cannot decode to a
+world-frame action through explicit geometry without extrinsics somewhere, so a
+camera-frame policy must learn the camera-to-robot map implicitly.)*
+
+*(And a warning about benchmarks: `proprio_joints`, which sees no cameras at
+all, beats `rgb`, `rgbd`, `xyz_cam` and `rgbd_unproj`. Scripted demonstrations
+are a deterministic function of the scene, so joint angles leak the answer. Any
+3D-versus-2D comparison run this way with joint-angle proprioception is
+measuring almost nothing — which is why the other arms get PerAct's four
+numbers instead.)*
 
 ---
 
