@@ -12,6 +12,9 @@ means nothing without them:
 * **oracle keyposes** -- the demonstration's own recorded keyposes, replayed
   through this executor on the same scene. If the oracle cannot place the block,
   the executor is broken and no policy number from it is worth reading.
+  **Measured before any policy was run: oracle replay places 13/15 and picks
+  15/15, against the expert's own 14/15.** The executor is therefore sound, and
+  a policy that fails here fails on its predictions.
 * **the scripted expert** -- its own full routine, which is the ceiling.
 
 One thing the executor knows that the policy does not: the approach to a grasp
