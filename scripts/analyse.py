@@ -132,26 +132,34 @@ def main() -> None:
 
     out += ["", "### 3b. Is that cost predictable without training anything?", ""]
     out.append(
-        "A rotation of eps about a camera displaces every reconstructed point by "
-        "about `d sin(eps)`, where `d` is the camera-to-workspace distance. If a "
-        "canonicalised policy's error under miscalibration is just that rigid "
-        "displacement carried through, then its calibration budget can be computed "
-        "from the rig's geometry before a single epoch is trained. The prediction "
-        "below is made from the nominal rig alone -- no fitted constants."
+        "A rotation of eps about a camera displaces every reconstructed point by an "
+        "amount geometry fixes in advance: `sqrt( (<|sin t|> d sin eps)^2 + trans^2 )`, "
+        "with `d` the camera-to-workspace distance and `<|sin t|> = pi/4` the mean "
+        "sine of the angle between a uniformly random rotation axis and the line of "
+        "sight. **Measured directly on the reconstruction, with no policy involved, "
+        "that prediction is accurate to 0.98 of the measurement and constant to two "
+        "decimal places from eps = 0.5 to 10 degrees** (see "
+        "`results/calibration_law.json`). So the question here is how much of that "
+        "rigid displacement survives into a trained policy's error."
     )
     from rvt_lerobot.render.rig import NOMINAL_RIG, WORKSPACE_CENTRE
 
     d = float(np.mean([
         np.linalg.norm(pose.eye - WORKSPACE_CENTRE) for pose in NOMINAL_RIG.values()
     ]))
+
+    def predict(eps_deg, mm_per_deg=1.0):
+        rot = (np.pi / 4) * d * np.sin(np.deg2rad(eps_deg)) * 1000.0
+        return float(np.hypot(rot, mm_per_deg * eps_deg))
+
     out.append("")
     out.append(f"Camera-to-workspace distance d = {d*1000:.0f} mm (nominal rig).")
     out.append("")
-    out.append("| eps (deg) | predicted d sin(eps) + 1 mm/deg | rvt measured | xyz_real measured | rgb measured |")
+    out.append("| eps (deg) | predicted displacement | rvt measured | xyz_real measured | rgb measured |")
     out.append("|---|---|---|---|---|")
     ratios = []
     for e in sorted({r["eps"] for r in rows if r["eps"] > 0}):
-        pred = d * np.sin(np.deg2rad(e)) * 1000 + e  # the operator also shifts 1 mm/deg
+        pred = predict(e)
         cells = []
         for arm in ("rvt", "xyz_real", "rgb"):
             v = seeds_at(rows, arm, eps=e)
@@ -173,11 +181,13 @@ def main() -> None:
         )
         rgb_nom = seeds_at(rows, "rgb", eps=0.0)
         if len(rgb_nom):
-            tol = np.rad2deg(np.arcsin(min(1.0, rgb_nom.mean() / 1000 / d)))
+            tol = np.rad2deg(np.arcsin(min(
+                1.0, rgb_nom.mean() / 1000 / d / (np.pi / 4))))
             out.append("")
             out.append(
                 f"**Calibration budget.** An RGB policy on this task sits at "
-                f"{rgb_nom.mean():.1f} mm. Setting `d sin(eps) = {rgb_nom.mean():.1f} mm` "
+                f"{rgb_nom.mean():.1f} mm. Setting the predicted displacement equal to "
+                f"{rgb_nom.mean():.1f} mm "
                 f"gives eps* = {tol:.1f} deg: beyond roughly that much calibration "
                 "error, the geometry a 3D encoder is built on costs more than it pays, "
                 "and it can be computed from a tape measure."

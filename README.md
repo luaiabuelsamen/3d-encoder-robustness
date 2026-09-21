@@ -32,6 +32,58 @@ deployment actually travels.
 
 ---
 
+## Result 1: a 3D encoder's calibration cost is geometry, not learning
+
+This one needs no training at all, and it is the sharpest thing here.
+
+Hand a policy extrinsics that are wrong by ε degrees and every reconstructed
+point moves by an amount geometry fixes in advance:
+
+```
+displacement  =  sqrt( ( ⟨|sin θ|⟩ · d · sin ε )² + translation² ),   ⟨|sin θ|⟩ = π/4
+```
+
+where *d* is the camera-to-workspace distance. The π/4 is the mean sine of the
+angle between a uniformly random rotation axis and the line of sight — only the
+perpendicular component of a rotation moves a point along that ray.
+
+**Measured against that prediction, with zero fitted constants:**
+
+| ε (deg) | predicted | measured, per camera | after fusing cameras | disagreement between cameras |
+|---|---|---|---|---|
+| 0 | 0.0 | 0.0 | 0.0 | 10.2 |
+| 0.5 | 4.6 | 4.5 | 2.7 | 10.7 |
+| 1 | 9.2 | 9.1 | 5.3 | 12.2 |
+| 2 | 18.5 | 18.1 | 10.7 | 17.4 |
+| 5 | 46.2 | 45.4 | 26.7 | 37.5 |
+| 10 | 92.0 | 90.6 | 53.8 | 73.2 |
+
+*(mm; 60 held-out frames, block localised from MuJoCo's segmentation buffer)*
+
+The ratio measured/predicted is **0.98, constant to two decimal places across a
+twentyfold range of ε**. Three consequences:
+
+1. **2° of calibration error moves the reconstruction by a block width.** Not
+   "degrades it" — moves it, rigidly.
+2. **Fusing cameras helps, but only by √n.** Independent errors partially
+   cancel, which is why the fused curve sits below the per-camera one. What it
+   cannot fix is the third column: cameras that disagree *smear* the object
+   rather than displace it, and that disagreement grows just as fast.
+3. **The budget is computable before you choose an architecture.** Set the
+   predicted displacement equal to whatever error an RGB policy achieves on your
+   task, and solve for ε. Beyond that, the geometry a 3D encoder is built on
+   costs more than it pays.
+
+![calibration law](figures/fig4_calibration_law.png)
+
+Note the ε = 0 row: the cameras already disagree by 10.2 mm with *perfect*
+calibration, because each sees a different surface of the block and depth is
+quantised to a millimetre. That is the floor a multi-view method starts from.
+
+---
+
+---
+
 ## The arms
 
 Identical transformer, identical capacity, identical optimiser and schedule,
