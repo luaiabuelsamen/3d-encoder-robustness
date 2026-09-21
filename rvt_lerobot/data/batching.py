@@ -23,6 +23,11 @@ from ..render.virtual import render_views
 #: value the noise model writes into sensor holes.
 NO_RETURN = FAR - 1e-3
 
+#: Mean camera-to-workspace distance for the nominal rig, in metres. Used only
+#: to centre CAMERA-frame coordinates; world-frame arms centre on the workspace
+#: itself and need no such constant.
+NOMINAL_CAMERA_DISTANCE = 0.67
+
 
 class ConditionCache:
     """One rendered condition held in RAM, served as batches."""
@@ -83,9 +88,16 @@ def make_images(spec: ArmSpec, batch: dict[str, Tensor], virtual_size: int = 96)
             x = (cols - k[..., 0, 2][..., None, None]) / k[..., 0, 0][..., None, None] * depth
             y = (rows - k[..., 1, 2][..., None, None]) / k[..., 1, 1][..., None, None] * depth
             cam = torch.stack([x, y, depth], dim=-1)
-            # normalise by the same half-extent used for world coordinates, so
-            # the two XYZ arms see numbers of comparable scale
-            cam = (cam / (WORKSPACE_EXTENT / 2)).clamp(-2, 2) * valid.unsqueeze(-1)
+            # Camera-frame z is an ABSOLUTE distance (0.4-1.2 m here), not an
+            # offset from the workspace centre the way the world-frame arms'
+            # coordinates are. Dividing it by the same half-extent sent every
+            # depth beyond 0.6 m into the clamp -- measured mean 1.38 against a
+            # clamp at 2.0, i.e. most of the scene's depth information was being
+            # destroyed before the network saw it. Subtract the nominal
+            # camera-to-workspace distance first so the workspace sits near zero.
+            origin = cam.new_tensor([0.0, 0.0, NOMINAL_CAMERA_DISTANCE])
+            cam = ((cam - origin) / (WORKSPACE_EXTENT / 2)).clamp(-2, 2)
+            cam = cam * valid.unsqueeze(-1)
             return torch.cat([rgb, cam.permute(0, 1, 4, 2, 3)], dim=2)
         if spec.channels == "rgbxyz":
             pts = unproject_torch(depth, batch["K"], batch["T"])    # (B,V,H,W,3)
