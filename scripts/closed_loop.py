@@ -53,6 +53,17 @@ from rvt_lerobot.vendor.so101_scene import JAW_OPEN, JAW_SHUT, TABLE_TOP  # noqa
 #: without letting one loop forever.
 MAX_KEYPOSES = 14
 
+#: Fraction of the episode elapsed at each keypose, averaged over the training
+#: demonstrations. The policy's `low_dim_state` carries a progress term, and at
+#: training time that term is the frame index over the episode length -- so the
+#: values it saw at keypose 5 are near 0.67, not 5/14 = 0.36. Sending the naive
+#: ratio puts every observation off-distribution on a feature the policy leans
+#: on to tell which phase it is in, and it grasped nothing at all: 0/3 while the
+#: oracle replaying the same executor scored 3/3.
+KEYPOSE_PROGRESS = (
+    0.147, 0.278, 0.331, 0.356, 0.512, 0.674, 0.792, 0.838, 0.881, 0.981, 0.997,
+)
+
 #: Mid-range of the domain randomisation's block half-width. Used for the
 #: approach tool offset -- see the module docstring.
 NOMINAL_HALF_WIDTH = 0.008
@@ -144,7 +155,7 @@ def policy_rollout(scene, model, cond, rng, device, image) -> dict:
             (jaw_q - JAW_SHUT) / span,
             (jaw_cmd - JAW_SHUT) / span,
             float(jaw_cmd > GRIP_OPEN_THRESHOLD),
-            min(1.0, step / float(MAX_KEYPOSES)),
+            KEYPOSE_PROGRESS[min(step, len(KEYPOSE_PROGRESS) - 1)],
         ]], dtype=torch.float32).to(device)
         with torch.no_grad():
             out = model(make_images(model.spec, batch, virtual_size=image), proprio, calib=batch)

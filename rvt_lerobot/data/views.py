@@ -71,6 +71,18 @@ def build_samples(
     out: list[Sample] = []
     for i, ep in enumerate(episodes):
         kf = ep.keyframes
+        if len(kf):
+            # Home -> first keypose. Omitting this was a real hole: it is the
+            # only transition where the arm has NOT already been steered toward
+            # the object, so it is the most vision-dependent decision in the
+            # episode, and a policy never trained on it is off-distribution at
+            # the very first step of any rollout. Measured: a policy scoring
+            # 3.6 mm on keyframe-to-keyframe prediction commanded a grasp at the
+            # home pose, closed on air, and carried an empty gripper to the end.
+            out.append(Sample(i, 0, int(kf[0])))
+            for _ in range(per_segment - 1):
+                if kf[0] > 2:
+                    out.append(Sample(i, int(rng.integers(1, kf[0])), int(kf[0])))
         for a, b in zip(kf[:-1], kf[1:]):
             out.append(Sample(i, int(a), int(b)))
             for _ in range(per_segment - 1):

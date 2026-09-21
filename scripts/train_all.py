@@ -61,6 +61,11 @@ def fingerprint(arm: str, args) -> dict:
         "per_segment": args.per_segment,
         "steps": args.steps,
         "batch": args.batch,
+        # build_samples gained the home -> first-keypose transition partway
+        # through. A checkpoint trained without it cannot be compared against
+        # one trained with it, and the difference changes no tensor shape, so
+        # nothing else would notice.
+        "home_transition": True,
     }
 
 
