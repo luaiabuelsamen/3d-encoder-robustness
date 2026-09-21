@@ -239,7 +239,73 @@ most steps do not need eyes, and the one that does is averaged away.
 For anyone building on this: report the first keypose separately, or report
 closed-loop success. The mean over a trajectory is not a perception metric.
 
-## 7. Limitations
+## 7. Result 5: fusing cameras buys coverage, not density
+
+The study's world-frame arm sees four cameras and its camera-frame arm sees
+one, and at zero calibration error they tie. Four cameras see strictly more of
+the scene than one, so a tie is suspicious — the obvious reading is that fusion
+is broken and the world-frame arm is quietly learning from a single view.
+
+Counting what actually reaches the encoder settles it, with no training
+involved: 60 frames drawn from expert trajectories so the arm's own body
+occludes cameras the way it does in a real cell, the block mask taken from
+MuJoCo's segmentation buffer, and a label channel carried through the sampler
+so each surviving point can be traced to what it hit.
+
+| | 1 camera | 4 cameras fused |
+|---|---:|---:|
+| object pixels available | 30.4 | 83.6 |
+| valid points in the workspace crop | 6418 | 18906 |
+| **object's share of the cloud** | **0.473%** | **0.442%** |
+| points on the object, 1024-point budget | 4.6 | 4.4 |
+| points on the object, 4096-point budget | 19.1 | 17.8 |
+
+Fusion is not broken: it nearly triples the object pixels available. But a
+uniform fixed-budget subsample does not see the count, it sees the *share*, and
+fusion adds object points and background points in the same proportion. The
+ratio is identical at both budgets, so this is not a budget that happens to be
+too small.
+
+Where fusion earns its calibration cost is occlusion: in 7 of 60 frames the
+block was invisible to the single camera, and fusion recovered it in 5.
+
+**More cameras buy coverage, not density.** Density on the object comes from
+the workspace crop instead. Cropping is also the cheaper of the two
+interventions by a wide margin: on this scene an uncropped 1024-point sample
+contained about 3.5 points of the 20 mm block, and cropping to the workspace
+fixes that without adding a camera or a calibration procedure.
+
+## 8. A note on what almost went unnoticed
+
+Two bugs in this work were invisible to every metric it reports, and both share
+a shape worth naming: a quantity was encoded one way and decoded another, and
+every consumer of it applied the same wrong decode, so the error cancelled
+everywhere except where the number met the physical world.
+
+**The rotation encoding.** `rot_to_6d` packed a rotation's two columns
+row-major; `rot6d_to_matrix` read them column-major. For a rotation about z the
+round trip returns the yaw *negated*. Training converged — the network learns
+whatever vector it is shown. The rotation metric read a healthy 13.3 degrees —
+it decodes prediction and target the same wrong way. Only the executed grasp
+heading was exposed, and there the robot approached every block mirrored:
+closed-loop 0.10 picked, against an oracle at 0.97 through the same executor
+and a validation translation error of 6.4 mm.
+
+**The depth unit.** `LeRobotDataset` dequantises depth to millimetres by
+default; the point-cloud processor's `depth_scale` defaults to metres. Points
+land a thousand times too far out, the workspace crop rejects all of them, and
+a frame with no surviving points is returned as zeros by design so a dropped
+depth frame cannot kill a run. A policy trains on empty clouds and no metric
+moves.
+
+The common lesson is not "write more tests". It is that a round trip through an
+encoder and *its own decoder* is the cheapest test that exists, and neither
+encoding had one, because neither number ever leaves the model — which is
+exactly why nothing caught them. Every other convention in this project was
+checked against ground truth from the first day. Both round trips are asserted
+now.
+
+## 9. Limitations
 
 One task, one arm, simulation only. Small models (≈3 M parameters) trained for
 2500 steps under a fixed budget — absolute numbers would improve with more, but
@@ -263,7 +329,7 @@ Any 3D-versus-2D comparison run on scripted data with joint-angle
 proprioception is measuring almost nothing. Every arm here is given PerAct's
 four low-dimensional numbers instead.
 
-## 7. What was built
+## 10. What was built
 
 A dependency-free implementation of the pieces, since the reference ones need
 PyTorch3D or a custom CUDA extension that do not build on many machines:
