@@ -1,0 +1,1043 @@
+{
+  "summary": {
+    "frames": 60,
+    "num_points": 4096,
+    "on_object_1cam_mean": 14.016666666666667,
+    "on_object_1cam_world_mean": 19.05,
+    "on_object_4cam_mean": 17.816666666666666,
+    "valid_1cam_mean": 8738.433333333332,
+    "valid_4cam_mean": 18906.266666666666,
+    "block_pixels_single_mean": 30.35,
+    "block_pixels_union_mean": 83.61666666666666,
+    "frames_block_occluded_from_single": 7,
+    "frames_recovered_by_fusion": 5,
+    "single_camera": "front",
+    "cameras": [
+      "front",
+      "left_shoulder",
+      "right_shoulder"
+    ]
+  },
+  "rows": [
+    {
+      "frame": 0,
+      "block_pixels": {
+        "front": 43,
+        "left_shoulder": 44,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 87,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 28,
+      "on_object_4cam": 15,
+      "on_object_1cam_world": 34,
+      "valid_1cam": 8738,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 1,
+      "block_pixels": {
+        "front": 19,
+        "left_shoulder": 0,
+        "right_shoulder": 49
+      },
+      "block_pixels_union": 68,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 6,
+      "on_object_4cam": 17,
+      "on_object_1cam_world": 10,
+      "valid_1cam": 8718,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 2,
+      "block_pixels": {
+        "front": 35,
+        "left_shoulder": 31,
+        "right_shoulder": 32
+      },
+      "block_pixels_union": 98,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 16,
+      "on_object_4cam": 21,
+      "on_object_1cam_world": 22,
+      "valid_1cam": 8755,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 3,
+      "block_pixels": {
+        "front": 35,
+        "left_shoulder": 31,
+        "right_shoulder": 32
+      },
+      "block_pixels_union": 98,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 13,
+      "on_object_4cam": 15,
+      "on_object_1cam_world": 20,
+      "valid_1cam": 8754,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 4,
+      "block_pixels": {
+        "front": 10,
+        "left_shoulder": 24,
+        "right_shoulder": 24
+      },
+      "block_pixels_union": 58,
+      "single_sees_block": false,
+      "any_sees_block": true,
+      "on_object_1cam": 6,
+      "on_object_4cam": 18,
+      "on_object_1cam_world": 6,
+      "valid_1cam": 8759,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 5,
+      "block_pixels": {
+        "front": 38,
+        "left_shoulder": 43,
+        "right_shoulder": 19
+      },
+      "block_pixels_union": 100,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 20,
+      "on_object_4cam": 23,
+      "on_object_1cam_world": 28,
+      "valid_1cam": 8753,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 6,
+      "block_pixels": {
+        "front": 0,
+        "left_shoulder": 0,
+        "right_shoulder": 66
+      },
+      "block_pixels_union": 66,
+      "single_sees_block": false,
+      "any_sees_block": true,
+      "on_object_1cam": 0,
+      "on_object_4cam": 13,
+      "on_object_1cam_world": 0,
+      "valid_1cam": 8692,
+      "valid_4cam": 18911,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 7,
+      "block_pixels": {
+        "front": 52,
+        "left_shoulder": 48,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 100,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 29,
+      "on_object_4cam": 28,
+      "on_object_1cam_world": 36,
+      "valid_1cam": 8740,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 8,
+      "block_pixels": {
+        "front": 55,
+        "left_shoulder": 16,
+        "right_shoulder": 11
+      },
+      "block_pixels_union": 82,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 27,
+      "on_object_4cam": 19,
+      "on_object_1cam_world": 38,
+      "valid_1cam": 8767,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 9,
+      "block_pixels": {
+        "front": 50,
+        "left_shoulder": 0,
+        "right_shoulder": 31
+      },
+      "block_pixels_union": 81,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 24,
+      "on_object_4cam": 15,
+      "on_object_1cam_world": 32,
+      "valid_1cam": 8737,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 10,
+      "block_pixels": {
+        "front": 40,
+        "left_shoulder": 46,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 86,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 16,
+      "on_object_4cam": 15,
+      "on_object_1cam_world": 25,
+      "valid_1cam": 8736,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 11,
+      "block_pixels": {
+        "front": 39,
+        "left_shoulder": 33,
+        "right_shoulder": 22
+      },
+      "block_pixels_union": 94,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 16,
+      "on_object_4cam": 21,
+      "on_object_1cam_world": 22,
+      "valid_1cam": 8767,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 12,
+      "block_pixels": {
+        "front": 46,
+        "left_shoulder": 21,
+        "right_shoulder": 36
+      },
+      "block_pixels_union": 103,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 17,
+      "on_object_4cam": 20,
+      "on_object_1cam_world": 23,
+      "valid_1cam": 8753,
+      "valid_4cam": 18907,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 13,
+      "block_pixels": {
+        "front": 35,
+        "left_shoulder": 15,
+        "right_shoulder": 8
+      },
+      "block_pixels_union": 58,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 14,
+      "on_object_4cam": 18,
+      "on_object_1cam_world": 18,
+      "valid_1cam": 8769,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 14,
+      "block_pixels": {
+        "front": 19,
+        "left_shoulder": 0,
+        "right_shoulder": 58
+      },
+      "block_pixels_union": 77,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 9,
+      "on_object_4cam": 16,
+      "on_object_1cam_world": 10,
+      "valid_1cam": 8721,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 15,
+      "block_pixels": {
+        "front": 43,
+        "left_shoulder": 47,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 90,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 21,
+      "on_object_4cam": 21,
+      "on_object_1cam_world": 31,
+      "valid_1cam": 8735,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 16,
+      "block_pixels": {
+        "front": 42,
+        "left_shoulder": 40,
+        "right_shoulder": 22
+      },
+      "block_pixels_union": 104,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 12,
+      "on_object_4cam": 21,
+      "on_object_1cam_world": 20,
+      "valid_1cam": 8771,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 17,
+      "block_pixels": {
+        "front": 27,
+        "left_shoulder": 37,
+        "right_shoulder": 64
+      },
+      "block_pixels_union": 128,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 11,
+      "on_object_4cam": 28,
+      "on_object_1cam_world": 19,
+      "valid_1cam": 8710,
+      "valid_4cam": 18915,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 18,
+      "block_pixels": {
+        "front": 29,
+        "left_shoulder": 16,
+        "right_shoulder": 15
+      },
+      "block_pixels_union": 60,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 15,
+      "on_object_4cam": 14,
+      "on_object_1cam_world": 19,
+      "valid_1cam": 8759,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 19,
+      "block_pixels": {
+        "front": 27,
+        "left_shoulder": 32,
+        "right_shoulder": 64
+      },
+      "block_pixels_union": 123,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 11,
+      "on_object_4cam": 27,
+      "on_object_1cam_world": 19,
+      "valid_1cam": 8717,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 20,
+      "block_pixels": {
+        "front": 37,
+        "left_shoulder": 26,
+        "right_shoulder": 58
+      },
+      "block_pixels_union": 121,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 20,
+      "on_object_4cam": 28,
+      "on_object_1cam_world": 26,
+      "valid_1cam": 8753,
+      "valid_4cam": 18914,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 21,
+      "block_pixels": {
+        "front": 18,
+        "left_shoulder": 0,
+        "right_shoulder": 65
+      },
+      "block_pixels_union": 83,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 9,
+      "on_object_4cam": 17,
+      "on_object_1cam_world": 10,
+      "valid_1cam": 8712,
+      "valid_4cam": 18916,
+      "valid_1cam_world": 6419
+    },
+    {
+      "frame": 22,
+      "block_pixels": {
+        "front": 30,
+        "left_shoulder": 21,
+        "right_shoulder": 46
+      },
+      "block_pixels_union": 97,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 18,
+      "on_object_4cam": 19,
+      "on_object_1cam_world": 20,
+      "valid_1cam": 8752,
+      "valid_4cam": 18914,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 23,
+      "block_pixels": {
+        "front": 25,
+        "left_shoulder": 19,
+        "right_shoulder": 41
+      },
+      "block_pixels_union": 85,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 11,
+      "on_object_4cam": 19,
+      "on_object_1cam_world": 18,
+      "valid_1cam": 8752,
+      "valid_4cam": 18914,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 24,
+      "block_pixels": {
+        "front": 42,
+        "left_shoulder": 26,
+        "right_shoulder": 58
+      },
+      "block_pixels_union": 126,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 22,
+      "on_object_4cam": 30,
+      "on_object_1cam_world": 28,
+      "valid_1cam": 8727,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 25,
+      "block_pixels": {
+        "front": 35,
+        "left_shoulder": 50,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 85,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 11,
+      "on_object_4cam": 13,
+      "on_object_1cam_world": 21,
+      "valid_1cam": 8737,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 26,
+      "block_pixels": {
+        "front": 30,
+        "left_shoulder": 39,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 69,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 14,
+      "on_object_4cam": 8,
+      "on_object_1cam_world": 18,
+      "valid_1cam": 8732,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 27,
+      "block_pixels": {
+        "front": 15,
+        "left_shoulder": 7,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 22,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 6,
+      "on_object_4cam": 6,
+      "on_object_1cam_world": 10,
+      "valid_1cam": 8711,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 28,
+      "block_pixels": {
+        "front": 0,
+        "left_shoulder": 0,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 0,
+      "single_sees_block": false,
+      "any_sees_block": false,
+      "on_object_1cam": 0,
+      "on_object_4cam": 0,
+      "on_object_1cam_world": 0,
+      "valid_1cam": 8692,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 29,
+      "block_pixels": {
+        "front": 39,
+        "left_shoulder": 32,
+        "right_shoulder": 32
+      },
+      "block_pixels_union": 103,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 14,
+      "on_object_4cam": 23,
+      "on_object_1cam_world": 25,
+      "valid_1cam": 8761,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 30,
+      "block_pixels": {
+        "front": 28,
+        "left_shoulder": 27,
+        "right_shoulder": 24
+      },
+      "block_pixels_union": 79,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 13,
+      "on_object_4cam": 24,
+      "on_object_1cam_world": 16,
+      "valid_1cam": 8757,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 31,
+      "block_pixels": {
+        "front": 21,
+        "left_shoulder": 32,
+        "right_shoulder": 18
+      },
+      "block_pixels_union": 71,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 8,
+      "on_object_4cam": 12,
+      "on_object_1cam_world": 12,
+      "valid_1cam": 8703,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 32,
+      "block_pixels": {
+        "front": 31,
+        "left_shoulder": 24,
+        "right_shoulder": 34
+      },
+      "block_pixels_union": 89,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 10,
+      "on_object_4cam": 16,
+      "on_object_1cam_world": 16,
+      "valid_1cam": 8757,
+      "valid_4cam": 18909,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 33,
+      "block_pixels": {
+        "front": 21,
+        "left_shoulder": 32,
+        "right_shoulder": 18
+      },
+      "block_pixels_union": 71,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 12,
+      "on_object_4cam": 18,
+      "on_object_1cam_world": 14,
+      "valid_1cam": 8732,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 34,
+      "block_pixels": {
+        "front": 48,
+        "left_shoulder": 52,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 100,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 21,
+      "on_object_4cam": 18,
+      "on_object_1cam_world": 33,
+      "valid_1cam": 8740,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 35,
+      "block_pixels": {
+        "front": 0,
+        "left_shoulder": 0,
+        "right_shoulder": 4
+      },
+      "block_pixels_union": 4,
+      "single_sees_block": false,
+      "any_sees_block": false,
+      "on_object_1cam": 0,
+      "on_object_4cam": 1,
+      "on_object_1cam_world": 0,
+      "valid_1cam": 8692,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 36,
+      "block_pixels": {
+        "front": 28,
+        "left_shoulder": 28,
+        "right_shoulder": 31
+      },
+      "block_pixels_union": 87,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 12,
+      "on_object_4cam": 17,
+      "on_object_1cam_world": 16,
+      "valid_1cam": 8757,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 37,
+      "block_pixels": {
+        "front": 24,
+        "left_shoulder": 27,
+        "right_shoulder": 15
+      },
+      "block_pixels_union": 66,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 16,
+      "on_object_4cam": 18,
+      "on_object_1cam_world": 17,
+      "valid_1cam": 8765,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 38,
+      "block_pixels": {
+        "front": 33,
+        "left_shoulder": 44,
+        "right_shoulder": 48
+      },
+      "block_pixels_union": 125,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 15,
+      "on_object_4cam": 26,
+      "on_object_1cam_world": 20,
+      "valid_1cam": 8722,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 39,
+      "block_pixels": {
+        "front": 41,
+        "left_shoulder": 50,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 91,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 17,
+      "on_object_4cam": 17,
+      "on_object_1cam_world": 21,
+      "valid_1cam": 8736,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 40,
+      "block_pixels": {
+        "front": 27,
+        "left_shoulder": 23,
+        "right_shoulder": 52
+      },
+      "block_pixels_union": 102,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 12,
+      "on_object_4cam": 17,
+      "on_object_1cam_world": 15,
+      "valid_1cam": 8738,
+      "valid_4cam": 18914,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 41,
+      "block_pixels": {
+        "front": 37,
+        "left_shoulder": 7,
+        "right_shoulder": 6
+      },
+      "block_pixels_union": 50,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 14,
+      "on_object_4cam": 7,
+      "on_object_1cam_world": 23,
+      "valid_1cam": 8748,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 42,
+      "block_pixels": {
+        "front": 0,
+        "left_shoulder": 0,
+        "right_shoulder": 60
+      },
+      "block_pixels_union": 60,
+      "single_sees_block": false,
+      "any_sees_block": true,
+      "on_object_1cam": 0,
+      "on_object_4cam": 13,
+      "on_object_1cam_world": 0,
+      "valid_1cam": 8692,
+      "valid_4cam": 18915,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 43,
+      "block_pixels": {
+        "front": 48,
+        "left_shoulder": 40,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 88,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 16,
+      "on_object_4cam": 23,
+      "on_object_1cam_world": 25,
+      "valid_1cam": 8724,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 44,
+      "block_pixels": {
+        "front": 43,
+        "left_shoulder": 21,
+        "right_shoulder": 40
+      },
+      "block_pixels_union": 104,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 22,
+      "on_object_4cam": 24,
+      "on_object_1cam_world": 30,
+      "valid_1cam": 8728,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 45,
+      "block_pixels": {
+        "front": 41,
+        "left_shoulder": 40,
+        "right_shoulder": 7
+      },
+      "block_pixels_union": 88,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 17,
+      "on_object_4cam": 16,
+      "on_object_1cam_world": 23,
+      "valid_1cam": 8741,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 46,
+      "block_pixels": {
+        "front": 0,
+        "left_shoulder": 0,
+        "right_shoulder": 61
+      },
+      "block_pixels_union": 61,
+      "single_sees_block": false,
+      "any_sees_block": true,
+      "on_object_1cam": 0,
+      "on_object_4cam": 12,
+      "on_object_1cam_world": 0,
+      "valid_1cam": 8692,
+      "valid_4cam": 18908,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 47,
+      "block_pixels": {
+        "front": 20,
+        "left_shoulder": 0,
+        "right_shoulder": 40
+      },
+      "block_pixels_union": 60,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 10,
+      "on_object_4cam": 10,
+      "on_object_1cam_world": 12,
+      "valid_1cam": 8719,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 48,
+      "block_pixels": {
+        "front": 43,
+        "left_shoulder": 32,
+        "right_shoulder": 39
+      },
+      "block_pixels_union": 114,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 23,
+      "on_object_4cam": 23,
+      "on_object_1cam_world": 30,
+      "valid_1cam": 8758,
+      "valid_4cam": 18911,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 49,
+      "block_pixels": {
+        "front": 39,
+        "left_shoulder": 26,
+        "right_shoulder": 41
+      },
+      "block_pixels_union": 106,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 21,
+      "on_object_4cam": 24,
+      "on_object_1cam_world": 28,
+      "valid_1cam": 8757,
+      "valid_4cam": 18911,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 50,
+      "block_pixels": {
+        "front": 0,
+        "left_shoulder": 29,
+        "right_shoulder": 14
+      },
+      "block_pixels_union": 43,
+      "single_sees_block": false,
+      "any_sees_block": true,
+      "on_object_1cam": 0,
+      "on_object_4cam": 8,
+      "on_object_1cam_world": 0,
+      "valid_1cam": 8745,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 51,
+      "block_pixels": {
+        "front": 20,
+        "left_shoulder": 21,
+        "right_shoulder": 36
+      },
+      "block_pixels_union": 77,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 14,
+      "on_object_4cam": 25,
+      "on_object_1cam_world": 15,
+      "valid_1cam": 8738,
+      "valid_4cam": 18907,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 52,
+      "block_pixels": {
+        "front": 43,
+        "left_shoulder": 47,
+        "right_shoulder": 0
+      },
+      "block_pixels_union": 90,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 22,
+      "on_object_4cam": 23,
+      "on_object_1cam_world": 28,
+      "valid_1cam": 8723,
+      "valid_4cam": 18905,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 53,
+      "block_pixels": {
+        "front": 22,
+        "left_shoulder": 21,
+        "right_shoulder": 36
+      },
+      "block_pixels_union": 79,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 9,
+      "on_object_4cam": 23,
+      "on_object_1cam_world": 11,
+      "valid_1cam": 8740,
+      "valid_4cam": 18907,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 54,
+      "block_pixels": {
+        "front": 27,
+        "left_shoulder": 21,
+        "right_shoulder": 36
+      },
+      "block_pixels_union": 84,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 10,
+      "on_object_4cam": 16,
+      "on_object_1cam_world": 16,
+      "valid_1cam": 8729,
+      "valid_4cam": 18907,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 55,
+      "block_pixels": {
+        "front": 32,
+        "left_shoulder": 23,
+        "right_shoulder": 37
+      },
+      "block_pixels_union": 92,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 19,
+      "on_object_4cam": 16,
+      "on_object_1cam_world": 24,
+      "valid_1cam": 8754,
+      "valid_4cam": 18908,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 56,
+      "block_pixels": {
+        "front": 40,
+        "left_shoulder": 38,
+        "right_shoulder": 22
+      },
+      "block_pixels_union": 100,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 16,
+      "on_object_4cam": 23,
+      "on_object_1cam_world": 22,
+      "valid_1cam": 8763,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 57,
+      "block_pixels": {
+        "front": 45,
+        "left_shoulder": 34,
+        "right_shoulder": 25
+      },
+      "block_pixels_union": 104,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 20,
+      "on_object_4cam": 15,
+      "on_object_1cam_world": 25,
+      "valid_1cam": 8763,
+      "valid_4cam": 18904,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 58,
+      "block_pixels": {
+        "front": 32,
+        "left_shoulder": 29,
+        "right_shoulder": 34
+      },
+      "block_pixels_union": 95,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 19,
+      "on_object_4cam": 20,
+      "on_object_1cam_world": 23,
+      "valid_1cam": 8760,
+      "valid_4cam": 18908,
+      "valid_1cam_world": 6418
+    },
+    {
+      "frame": 59,
+      "block_pixels": {
+        "front": 32,
+        "left_shoulder": 21,
+        "right_shoulder": 32
+      },
+      "block_pixels_union": 85,
+      "single_sees_block": true,
+      "any_sees_block": true,
+      "on_object_1cam": 17,
+      "on_object_4cam": 16,
+      "on_object_1cam_world": 20,
+      "valid_1cam": 8753,
+      "valid_4cam": 18908,
+      "valid_1cam_world": 6418
+    }
+  ]
+}
