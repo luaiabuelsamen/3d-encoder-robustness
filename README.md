@@ -82,8 +82,6 @@ quantised to a millimetre. That is the floor a multi-view method starts from.
 
 ---
 
----
-
 ## The arms
 
 Identical transformer, identical capacity, identical optimiser and schedule,
