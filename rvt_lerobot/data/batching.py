@@ -92,8 +92,17 @@ def make_images(spec: ArmSpec, batch: dict[str, Tensor], virtual_size: int = 96)
             pts = unproject(d0, k0).reshape(b, h * w, 3)
             pts = pts - pts.new_tensor([0.0, 0.0, NOMINAL_CAMERA_DISTANCE])
             mask = valid[:, :1].reshape(b, h * w)
-        cloud = sample_points(pts, mask, POINTCLOUD_POINTS)
-        return cloud / (WORKSPACE_EXTENT / 2)
+        # Crop to the workspace BEFORE subsampling. Without it a uniform
+        # subsample of a whole-scene cloud is mostly floor and far tabletop:
+        # measured on this scene, the block covers 28 of 8256 valid pixels, so
+        # 1024 uniform samples contain about 3.5 points of the object the
+        # policy has to localise -- 0.34% of its representation. DP3 crops for
+        # exactly this reason, and the PR exposes the same option as
+        # `workspace_centre` / `workspace_extent`.
+        half = WORKSPACE_EXTENT / 2
+        inside = (pts.abs() <= half).all(dim=-1)
+        cloud = sample_points(pts, mask & inside, POINTCLOUD_POINTS)
+        return (cloud / half).clamp(-1.0, 1.0)
 
     if spec.source == "real":
         if spec.channels == "rgb":
