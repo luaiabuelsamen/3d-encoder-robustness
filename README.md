@@ -130,7 +130,7 @@ and fragile to others, and no two share a profile.**
 
 ![sweeps](figures/main/fig1_sweeps.png)
 
-### Five findings
+### Six findings
 
 **1. Depth as a fourth channel is worse than no depth.** 21.9 mm against 17.3,
 and 47.6 against 21.8 on grasp keyposes. A convolutional encoder reads it as
@@ -168,6 +168,15 @@ in 7 of 60 frames the block was invisible to the single camera and fusion
 recovered it in 5. Density on the object comes from the workspace crop, which
 is much cheaper than another camera.
 
+**6. A translation metric cannot see a grasp.** The policy that reads 6.8 mm
+median translation error picks 0.60 and places 0.50 closed-loop, against an
+oracle replaying its own demonstrations at 0.97/0.87. The gap is heading: this
+gripper's fixed pad sits 11.9 mm off the tool centre, so a dozen degrees of
+yaw error lands it on top of the block instead of beside it, and a median
+heading error of 11.9 degrees costs more than the difference between any two
+encoders measured here. Report rotation alongside translation, or the number
+you publish will not be about grasping.
+
 ### So which should you build?
 
 There is no single answer, which is the point.
@@ -193,6 +202,31 @@ measuring almost nothing, which is why every other arm gets PerAct's four
 low-dimensional numbers instead.)*
 
 ---
+
+## A warning worth more than the findings
+
+Two bugs in this work were invisible to every metric it reports.
+
+`rot_to_6d` packed a rotation's two columns row-major while `rot6d_to_matrix`
+read them column-major, so the round trip returned the yaw **negated** and the
+robot approached every block mirrored. Training converged. The rotation metric
+read a healthy 13.3 degrees, because it decoded the prediction and the target
+the same wrong way and the error cancelled exactly. Closed-loop success was
+0.10 against an oracle at 0.97, and fixing the one line took it to 0.60.
+
+Separately, `LeRobotDataset` returns depth in millimetres by default while the
+point-cloud processor expects metres. Points land a thousand times too far out,
+the workspace crop rejects all of them, and a frame with no surviving points is
+returned as zeros by design so that a dropped depth frame cannot kill a run. A
+policy trains on empty clouds and no metric moves.
+
+Both have the same shape: a quantity encoded one way and decoded another, with
+every consumer applying the same wrong decode, so the error cancels everywhere
+except where the number meets the physical world. **A round trip through an
+encoder and its own decoder is the cheapest test that exists, and neither
+encoding had one** — precisely because neither number ever leaves the model.
+Both round trips are asserted now, in `check_conventions.py` and in the
+LeRobot PR's tests.
 
 ## The arms
 

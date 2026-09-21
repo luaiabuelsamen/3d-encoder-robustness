@@ -216,7 +216,12 @@ stressed regime — 17, 37, 70 mm — which sits on the slope.
 
 That should have predicted decent closed-loop performance from policies with
 5-10 mm error. It did not: they placed 0-7% against an oracle replay at 87%.
-The resolution is in which steps the error lives.
+
+Most of that gap turned out to be the rotation bug in §8, not a property of the
+task or the metric — with the 6D packing corrected and nothing else changed,
+the same architecture on the same data places 0.50 and picks 0.60. What follows
+is the part of the gap that survives the fix, and it is a smaller effect than
+the numbers above suggested.
 
 | arm | home → first keypose | every other step | ratio |
 |---|---|---|---|
@@ -232,12 +237,16 @@ placement before any subsequent state has drifted off-distribution.
 
 **The aggregate keypose metric is dominated by steps where proprioception
 already constrains the answer, and it hides the single step that actually
-requires perception.** This is the same warning as the joint-angle control in
+requires perception.** It also hides rotation entirely: the headline number is
+a translation, and on this gripper heading is what decides the grasp. A median
+heading error of 11.9 degrees costs more than the difference between any two
+encoders in this report. This is the same warning as the joint-angle control in
 §7, arriving from the other direction: a blind policy scores 6.2 mm because
 most steps do not need eyes, and the one that does is averaged away.
 
-For anyone building on this: report the first keypose separately, or report
-closed-loop success. The mean over a trajectory is not a perception metric.
+For anyone building on this: report the first keypose separately, report
+rotation alongside translation, and report closed-loop success. The mean over a
+trajectory is not a perception metric, and a translation is not a grasp.
 
 ## 7. Result 5: fusing cameras buys coverage, not density
 
@@ -297,6 +306,21 @@ land a thousand times too far out, the workspace crop rejects all of them, and
 a frame with no surviving points is returned as zeros by design so a dropped
 depth frame cannot kill a run. A policy trains on empty clouds and no metric
 moves.
+
+Fixing the one line moved the task result by six-fold, on the same
+architecture, data, budget, executor and scenes:
+
+| | picked | placed |
+|---|---:|---:|
+| scripted expert | 1.00 | 0.97 |
+| oracle keyposes, replayed | 0.97 | 0.87 |
+| DP3 point cloud, before | 0.10 | 0.10 |
+| DP3 point cloud, after | **0.60** | **0.50** |
+
+Validation barely moved: 6.4 → 6.8 mm median translation, 0.74 → 0.72 within
+10 mm. That is the tell. Every translation result in this report stands
+unchanged, because the bug lived entirely in the rotation path; only `rot_deg`
+changes meaning, from 13.3 degrees in a mirrored frame to a true geodesic 11.6.
 
 The common lesson is not "write more tests". It is that a round trip through an
 encoder and *its own decoder* is the cheapest test that exists, and neither
