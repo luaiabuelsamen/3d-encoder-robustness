@@ -32,7 +32,7 @@ class ConditionCache:
     #: as float32, on a machine with 15 GB shared between CPU and GPU), and
     #: torch cannot fancy-index a uint16 CPU tensor at all.
     KEYS = ("rgb", "depth_mm", "K", "T", "target_pos", "target_rot6", "target_grip",
-            "proprio", "event")
+            "proprio", "proprio_full", "event")
 
     def __init__(self, arrays: dict[str, np.ndarray], device: str = "cuda") -> None:
         self.device = device
@@ -68,6 +68,25 @@ def make_images(spec: ArmSpec, batch: dict[str, Tensor], virtual_size: int = 96)
             # not the same number.
             dn = ((depth - 0.3) / 0.9).clamp(0, 1) * valid
             return torch.cat([rgb, dn.unsqueeze(2)], dim=2)
+        if spec.channels == "rgbxyz_cam":
+            # Points in each camera's OWN frame: the pinhole inverse and nothing
+            # else. No extrinsic is ever applied, so no calibration error can
+            # enter. The network has to learn the camera-to-robot relation from
+            # the data, which is precisely the trade DP3-style policies make.
+            k = batch["K"]
+            b, v, h, w = depth.shape
+            rows, cols = torch.meshgrid(
+                torch.arange(h, device=depth.device, dtype=depth.dtype),
+                torch.arange(w, device=depth.device, dtype=depth.dtype),
+                indexing="ij",
+            )
+            x = (cols - k[..., 0, 2][..., None, None]) / k[..., 0, 0][..., None, None] * depth
+            y = (rows - k[..., 1, 2][..., None, None]) / k[..., 1, 1][..., None, None] * depth
+            cam = torch.stack([x, y, depth], dim=-1)
+            # normalise by the same half-extent used for world coordinates, so
+            # the two XYZ arms see numbers of comparable scale
+            cam = (cam / (WORKSPACE_EXTENT / 2)).clamp(-2, 2) * valid.unsqueeze(-1)
+            return torch.cat([rgb, cam.permute(0, 1, 4, 2, 3)], dim=2)
         if spec.channels == "rgbxyz":
             pts = unproject_torch(depth, batch["K"], batch["T"])    # (B,V,H,W,3)
             centre = torch.tensor(WORKSPACE_CENTRE, device=pts.device, dtype=pts.dtype)

@@ -26,7 +26,7 @@ from rvt_lerobot.data import collect_study as C  # noqa: E402
 from rvt_lerobot.data.batching import ConditionCache, make_images  # noqa: E402
 from rvt_lerobot.data.views import Condition, build_samples, render_condition  # noqa: E402
 from rvt_lerobot.envs.multicam import MultiCamScene  # noqa: E402
-from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa: E402
+from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss, proprio_for  # noqa: E402
 
 
 def sync(device):
@@ -47,7 +47,7 @@ def time_step(model, cache, spec, batch_size, image, device, iters=12):
         images = make_images(spec, batch, virtual_size=image)
         sync(device)
         t2 = time.time()
-        out = model(images, batch["proprio"], calib=batch)
+        out = model(images, proprio_for(spec, batch), calib=batch)
         loss, _ = policy_loss(out, batch, spec, model)
         sync(device)
         t3 = time.time()

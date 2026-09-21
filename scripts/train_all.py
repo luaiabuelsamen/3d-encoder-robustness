@@ -37,7 +37,7 @@ from rvt_lerobot.data.batching import ConditionCache, make_images  # noqa: E402
 from rvt_lerobot.data.views import Condition, build_samples, render_condition  # noqa: E402
 from rvt_lerobot.envs.multicam import MultiCamScene  # noqa: E402
 from rvt_lerobot.evaluate import evaluate  # noqa: E402
-from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa: E402
+from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss, proprio_for  # noqa: E402
 from rvt_lerobot.render.rig import ALL_CAMERAS as R_ALL  # noqa: E402
 
 AUG_THETA_DEG = 15.0
@@ -74,7 +74,7 @@ def train_one(arm, seed, cache, val, args, device):
     for step in range(1, args.steps + 1):
         batch = cache.batch(rng.integers(0, cache.n, size=args.batch))
         images = make_images(spec, batch, virtual_size=args.image)
-        out = model(images, batch["proprio"], calib=batch)
+        out = model(images, proprio_for(spec, batch), calib=batch)
         loss, _ = policy_loss(out, batch, spec, model)
         opt.zero_grad(set_to_none=True)
         loss.backward()

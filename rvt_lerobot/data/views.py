@@ -20,6 +20,7 @@ import numpy as np
 
 from ..render import rig as R
 from ..render.noise import apply_depth_noise
+from ..vendor.so101_scene import JAW_OPEN, JAW_SHUT
 from .collect_study import GRIP_OPEN_THRESHOLD, Episode
 
 
@@ -90,7 +91,7 @@ def rot_to_6d(rot: np.ndarray) -> np.ndarray:
 
 def targets_for(episodes: list[Episode], samples: list[Sample]) -> dict[str, np.ndarray]:
     """Ground truth: next keyframe pose, plus the proprioception at observation."""
-    pos, rot6, grip, prop, event = [], [], [], [], []
+    pos, rot6, grip, prop, prop_full, event = [], [], [], [], [], []
     for s in samples:
         e = episodes[s.ep]
         pos.append(e.tcp[s.target])
@@ -99,15 +100,47 @@ def targets_for(episodes: list[Episode], samples: list[Sample]) -> dict[str, np.
         grip.append(now_open)
         # proprioception the robot genuinely has: its six joint angles and the
         # jaw command it is currently holding.
-        prop.append(np.concatenate([e.qpos[s.frame, :6], [e.jaw_cmd[s.frame]]]))
+        prop.append(low_dim_state(e, s.frame))
+        prop_full.append(np.concatenate([e.qpos[s.frame, :6], [e.jaw_cmd[s.frame]]]))
         event.append(_event_at(e, s.target))
     return {
         "target_pos": np.asarray(pos, dtype=np.float32),
         "target_rot6": np.asarray(rot6, dtype=np.float32),
         "target_grip": np.asarray(grip, dtype=np.float32),
         "proprio": np.asarray(prop, dtype=np.float32),
+        "proprio_full": np.asarray(prop_full, dtype=np.float32),
         "event": np.asarray(event, dtype=np.int64),
     }
+
+
+#: What PerAct and RVT actually feed their policies as `low_dim_state`: the
+#: gripper's own state and how far through the episode it is. **Not** the joint
+#: angles.
+#:
+#: The distinction is not pedantry, it is the difference between a perception
+#: benchmark and a no-op. The scripted expert is a deterministic function of the
+#: block's pose, so by the time the arm reaches keyframe k its joint
+#: configuration already encodes where the block is. Measured on this dataset: a
+#: policy that knows only which keyframe transition it is on predicts the next
+#: keypose to 24.4 mm, one that copies its nearest neighbour in joint space gets
+#: 16.3 mm, and a *trained* network given qpos[:6] reaches 6.1 mm with no cameras
+#: at all. Any 3D-versus-2D comparison run on stereotyped scripted demos with
+#: joint-angle proprioception is measuring almost nothing.
+PROPRIO_DIM = 4
+PROPRIO_FULL_DIM = 7
+
+
+def low_dim_state(episode: Episode, frame: int) -> np.ndarray:
+    """(jaw angle, jaw command, gripper open, progress) -- PerAct's four numbers."""
+    jaw_q = float(episode.qpos[frame, 5])
+    jaw_cmd = float(episode.jaw_cmd[frame])
+    span = max(1e-6, JAW_OPEN - JAW_SHUT)
+    return np.array([
+        (jaw_q - JAW_SHUT) / span,
+        (jaw_cmd - JAW_SHUT) / span,
+        float(jaw_cmd > GRIP_OPEN_THRESHOLD),
+        frame / max(1, len(episode.jaw_cmd) - 1),
+    ], dtype=np.float32)
 
 
 #: Phase labels. Averaging translation error over a whole trajectory hides the

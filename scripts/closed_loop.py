@@ -134,11 +134,18 @@ def observe(scene: MultiCamScene, cond: Condition, rng, device: str) -> dict:
 def policy_rollout(scene, model, cond, rng, device, image) -> dict:
     s = scene.scene
     ex = Executor(s)
-    for _ in range(MAX_KEYPOSES):
+    for step in range(MAX_KEYPOSES):
         batch = observe(scene, cond, rng, device)
-        proprio = torch.tensor(
-            np.concatenate([s.data.qpos[:6], [s.data.ctrl[5]]])[None], dtype=torch.float32
-        ).to(device)
+        # The same four numbers the dataset provides: jaw angle, jaw command,
+        # gripper open, and progress through the episode.
+        span = max(1e-6, JAW_OPEN - JAW_SHUT)
+        jaw_q, jaw_cmd = float(s.data.qpos[5]), float(s.data.ctrl[5])
+        proprio = torch.tensor([[
+            (jaw_q - JAW_SHUT) / span,
+            (jaw_cmd - JAW_SHUT) / span,
+            float(jaw_cmd > GRIP_OPEN_THRESHOLD),
+            min(1.0, step / float(MAX_KEYPOSES)),
+        ]], dtype=torch.float32).to(device)
         with torch.no_grad():
             out = model(make_images(model.spec, batch, virtual_size=image), proprio, calib=batch)
         pos = out["pos"][0].double().cpu().numpy()

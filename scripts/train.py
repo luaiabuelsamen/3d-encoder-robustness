@@ -26,7 +26,7 @@ from rvt_lerobot.data.batching import ConditionCache, make_images  # noqa: E402
 from rvt_lerobot.data.views import Condition, build_samples, render_condition  # noqa: E402
 from rvt_lerobot.envs.multicam import MultiCamScene  # noqa: E402
 from rvt_lerobot.evaluate import evaluate  # noqa: E402
-from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa: E402
+from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss, proprio_for  # noqa: E402
 
 #: Training-camera perturbation for the augmented arms: a fresh theta drawn
 #: uniformly up to this, per episode. Chosen to cover the evaluation grid's
@@ -97,7 +97,7 @@ def main() -> None:
         idx = rng.integers(0, train.n, size=a.batch)
         batch = train.batch(idx)
         images = make_images(spec, batch, virtual_size=a.image)
-        out = model(images, batch["proprio"], calib=batch)
+        out = model(images, proprio_for(spec, batch), calib=batch)
         loss, parts = policy_loss(out, batch, spec, model)
         opt.zero_grad(set_to_none=True)
         loss.backward()

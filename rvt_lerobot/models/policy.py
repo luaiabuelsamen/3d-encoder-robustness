@@ -12,14 +12,19 @@ places, which are the two mechanisms the study separates:
 Naming the mechanisms rather than the papers is deliberate. "RVT" is the
 combination of the last row of each list; the rows above it are the parts.
 
-    arm            encoder input                 translation decoder
-    ------------   ---------------------------   -------------------------
-    proprio        (none)                        regress
-    rgb            4 real RGB views              regress
-    rgbd           4 real RGB+D views            regress
-    rgbd_unproj    4 real RGB+D views            heatmap -> unproject
-    xyz_real       4 real RGB+XYZ views          heatmap -> unproject
-    rvt            5 canonical RGB+XYZ views     heatmap -> orthographic
+    arm            encoder input                 translation decoder   calibrated?
+    ------------   ---------------------------   -------------------   -----------
+    proprio        (none)                        regress               n/a
+    rgb            4 real RGB views              regress               no
+    rgbd           4 real RGB+D views            regress               no
+    xyz_cam        4 real RGB+XYZ, CAMERA frame  regress               no
+    rgbd_unproj    4 real RGB+D views            heatmap -> unproject  yes
+    xyz_real       4 real RGB+XYZ, world frame   heatmap -> unproject  yes
+    rvt            5 canonical RGB+XYZ views     heatmap -> orthographic yes
+
+The `calibrated?` column is the one that decides deployability. Everything
+below the line consumes extrinsics and inherits their error; everything above it
+does not.
 
 `xyz_real` is the arm that makes the comparison sharp. It gets exactly the same
 information as `rvt` -- a world-frame point cloud with colour -- and decodes it
@@ -53,10 +58,15 @@ class ArmSpec:
     channels: str      # "rgb" | "rgbd" | "rgbxyz"
     decode: str        # "regress" | "unproject" | "orthographic"
     camera_aug: bool = False
+    full_proprio: bool = False   # joint angles instead of PerAct's low_dim_state
+
+    @property
+    def proprio_key(self) -> str:
+        return "proprio_full" if self.full_proprio else "proprio"
 
     @property
     def in_channels(self) -> int:
-        base = {"rgb": 3, "rgbd": 4, "rgbxyz": 6}[self.channels]
+        base = {"rgb": 3, "rgbd": 4, "rgbxyz": 6, "rgbxyz_cam": 6}[self.channels]
         return base + (1 if self.source == "virtual" else 0)  # virtual adds a hit mask
 
     @property
@@ -71,9 +81,29 @@ ARMS: dict[str, ArmSpec] = {
     "rgbd_unproj": ArmSpec("real", "rgbd", "unproject"),
     "xyz_real": ArmSpec("real", "rgbxyz", "unproject"),
     "rvt": ArmSpec("virtual", "rgbxyz", "orthographic"),
+    # 3D structure WITHOUT world calibration: per-pixel points in each camera's
+    # own frame, never transformed by an extrinsic. This is the design choice
+    # that lets DP3 and its descendants work on uncalibrated rigs, and it is the
+    # rung that decides what a library like LeRobot should ship -- its users
+    # have one hand-mounted camera and no calibration, which is the regime where
+    # a world frame pays least and costs most. Expected to be FLAT under the
+    # miscalibration axis, like the RGB arms, and to degrade under camera motion,
+    # unlike the canonicalised ones.
+    "xyz_cam": ArmSpec("real", "rgbxyz_cam", "regress"),
     "rgb_aug": ArmSpec("real", "rgb", "regress", camera_aug=True),
     "rvt_aug": ArmSpec("virtual", "rgbxyz", "orthographic", camera_aug=True),
+    # Reported as a control, not as a competitor: what a blind policy achieves
+    # when it is handed the joint angles too. On stereotyped scripted demos that
+    # is 6.1 mm -- better than most sighted arms -- which is a fact about the
+    # benchmark, not about the method, and is exactly why the other arms get
+    # PerAct's four numbers instead.
+    "proprio_joints": ArmSpec("none", "rgb", "regress", full_proprio=True),
 }
+
+
+def proprio_for(spec: ArmSpec, batch: dict):
+    """The proprioception vector this arm is entitled to."""
+    return batch[spec.proprio_key]
 
 
 # ------------------------------------------------------------------- backbone
@@ -169,9 +199,11 @@ class MultiViewPolicy(nn.Module):
         depth: int = 6,
         heads: int = 6,
         heatmap_size: int = 32,
-        proprio_dim: int = 7,
+        proprio_dim: int | None = None,
     ) -> None:
         super().__init__()
+        if proprio_dim is None:
+            proprio_dim = 7 if spec.full_proprio else 4
         self.spec = spec
         self.image_size = image_size
         self.heatmap_size = heatmap_size

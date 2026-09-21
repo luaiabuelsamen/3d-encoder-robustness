@@ -23,7 +23,7 @@ from rvt_lerobot.data import collect_study as C  # noqa: E402
 from rvt_lerobot.data.batching import ConditionCache, make_images  # noqa: E402
 from rvt_lerobot.data.views import Condition, build_samples, render_condition  # noqa: E402
 from rvt_lerobot.envs.multicam import MultiCamScene  # noqa: E402
-from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa: E402
+from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss, proprio_for  # noqa: E402
 
 IMAGE = 96
 N_EPISODES = 4
@@ -31,6 +31,15 @@ STEPS = 250
 
 
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--arms", default=",".join(ARMS),
+                    help="comma-separated subset to smoke (default: all)")
+    ap.add_argument("--steps", type=int, default=STEPS)
+    args = ap.parse_args()
+    arms = {k: ARMS[k] for k in args.arms.split(",") if k}
+    steps = args.steps
     dev = pick_device(allow_cpu=bool(int(__import__("os").environ.get("RVT_ALLOW_CPU", "0"))))
     torch.manual_seed(0)
 
@@ -56,7 +65,7 @@ def main() -> int:
     print(f"target spread (mm): {np.round(spread * 1000, 1)}\n")
 
     fails = []
-    for name, spec in ARMS.items():
+    for name, spec in arms.items():
         torch.manual_seed(0)
         model = MultiViewPolicy(spec, image_size=IMAGE, patch=16).to(dev)
         n_par = sum(p.numel() for p in model.parameters())
@@ -68,8 +77,8 @@ def main() -> int:
 
         t0 = time.time()
         first = last = None
-        for step in range(STEPS):
-            out = model(images, batch["proprio"], calib=batch)
+        for step in range(steps):
+            out = model(images, proprio_for(spec, batch), calib=batch)
             loss, parts = policy_loss(out, batch, spec, model)
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -80,14 +89,14 @@ def main() -> int:
         dt = time.time() - t0
 
         with torch.no_grad():
-            out = model(images, batch["proprio"], calib=batch)
+            out = model(images, proprio_for(spec, batch), calib=batch)
             err = (out["pos"] - batch["target_pos"]).norm(dim=-1).mean().item()
         shape = tuple(images.shape[1:]) if images is not None else None
         ok = err < 0.03
         print(
             f"{'ok ' if ok else 'BAD'} {name:12s} {n_par/1e6:4.1f}M  in={str(shape):18s} "
             f"loss {first:7.4f} -> {last:7.4f}   train |err| = {err*1000:6.1f} mm   "
-            f"{dt/STEPS*1000:5.1f} ms/step"
+            f"{dt/steps*1000:5.1f} ms/step"
         )
         if not ok:
             fails.append(f"{name}: cannot overfit 32 samples ({err*1000:.0f} mm)")

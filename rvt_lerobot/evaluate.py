@@ -14,7 +14,7 @@ import torch
 from torch import Tensor
 
 from .data.batching import make_images
-from .models.policy import MultiViewPolicy
+from .models.policy import MultiViewPolicy, proprio_for
 
 #: The block's width. A translation prediction inside this is a grasp; outside
 #: it, the jaws close on air.
@@ -53,7 +53,7 @@ def evaluate(
         idx = np.arange(start, min(start + batch_size, n))
         batch = cache.batch(idx)
         images = make_images(model.spec, batch, virtual_size=virtual_size)
-        out = model(images, batch["proprio"], calib=batch)
+        out = model(images, proprio_for(model.spec, batch), calib=batch)
         errs.append((out["pos"] - batch["target_pos"]).norm(dim=-1).cpu())
         rots.append(geodesic_degrees(out["rot6"], batch["target_rot6"]).cpu())
         grips.append(
