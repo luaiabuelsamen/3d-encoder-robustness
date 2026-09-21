@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
-data/
-runs/
+
+# Anchored to the repository root on purpose. An unanchored `data/` also matches
+# `rvt_lerobot/data/`, which is package source, and silently kept the dataset
+# builder, the condition renderer and the batch builder out of every commit.
+/data/
+/runs/
+/results/*.json
 *.npz
 *.npy
 *.rrd
