@@ -130,7 +130,7 @@ and fragile to others, and no two share a profile.**
 
 ![sweeps](figures/main/fig1_sweeps.png)
 
-### Four findings
+### Five findings
 
 **1. Depth as a fourth channel is worse than no depth.** 21.9 mm against 17.3,
 and 47.6 against 21.8 on grasp keyposes. A convolutional encoder reads it as
@@ -156,6 +156,17 @@ grid compounds the error; consuming it as a set does not. Combined with
 finding 3 this is the trade canonical re-rendering actually makes: it buys
 viewpoint invariance and pays in sensitivity to everything that corrupts the
 geometry it is rendering.
+
+**5. Fusing four cameras buys coverage, not density.** Counted against ground
+truth from the segmentation buffer: four cameras nearly triple the object
+pixels available (30.4 → 83.6), but the object's *share* of the cloud barely
+moves (0.473% → 0.442%), and a uniform fixed-budget subsample only ever sees
+the share. Identical at a 1024- and a 4096-point budget, so it is not a budget
+that happens to be too small. That is why one camera with no calibration ties
+four fused ones above. Fusion earns its calibration cost on occlusion instead:
+in 7 of 60 frames the block was invisible to the single camera and fusion
+recovered it in 5. Density on the object comes from the workspace crop, which
+is much cheaper than another camera.
 
 ### So which should you build?
 
