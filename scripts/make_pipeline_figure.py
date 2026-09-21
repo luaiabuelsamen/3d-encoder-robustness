@@ -55,25 +55,47 @@ def label(img: np.ndarray, text: str, sub: str = "") -> np.ndarray:
     return np.asarray(pil)
 
 
-def cloud_tile(points: np.ndarray, size: int = TILE, view: str = "front") -> np.ndarray:
-    """Rasterise a normalised cloud, coloured by height.
+def scatter_tile(
+    points: np.ndarray,
+    ax_u: int,
+    ax_v: int,
+    colour_axis: int,
+    size: int = TILE,
+    flip_v: bool = True,
+    dot: int = 3,
+) -> np.ndarray:
+    """Scatter a cloud with EXPLICIT axes, coloured by an explicit axis.
 
-    Rendered at a third of the output size and upscaled, so each point becomes a
-    legible 3x3 block instead of a single pixel lost against the background. A
-    1024-point cloud drawn one-pixel-per-point reads as noise.
+    The first version of this reused the virtual renderer's view names, which
+    are defined in world coordinates. Applied to a camera-frame cloud, "front"
+    means horizontal-position against DEPTH, and the colour was depth too -- so
+    the vertical axis and the colour axis were the same quantity and the panel
+    came out a smooth gradient wash with no scene in it. Axes are named here
+    rather than inherited.
+
+    Points are drawn as `dot`-pixel squares. A 1024-point cloud at one pixel per
+    point reads as static whatever the axes are.
     """
-    pts = torch.from_numpy(points).float()[None]
-    z = points[:, 2]
-    lo, hi = np.percentile(z, 2), np.percentile(z, 98)
-    t = np.clip((z - lo) / max(1e-6, hi - lo), 0, 1)
-    colour = np.stack([t, t * 0.8 + 0.2, 1.0 - t], -1).astype(np.float32)
-    imgs = V.render_views(
-        pts, torch.from_numpy(colour)[None], torch.ones(1, len(points), dtype=torch.bool),
-        views=(view,), centre=pts.new_zeros(3), extent=2.4, img_size=size // 3,
-    )
-    rgb = (imgs[0, 0, :3].permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-    rgb[imgs[0, 0, 3].numpy() <= 0.5] = BG
-    return np.asarray(Image.fromarray(rgb).resize((size, size), Image.NEAREST))
+    u, v, c = points[:, ax_u], points[:, ax_v], points[:, colour_axis]
+    lo, hi = np.percentile(c, 2), np.percentile(c, 98)
+    t = np.clip((c - lo) / max(1e-6, hi - lo), 0, 1)
+    colour = np.stack([t, t * 0.8 + 0.2, 1.0 - t], -1)
+
+    span = max(np.ptp(u), np.ptp(v)) or 1.0
+    cu, cv = (u.min() + u.max()) / 2, (v.min() + v.max()) / 2
+    margin = dot + 2
+    scale = (size - 2 * margin) / span
+    px = np.clip(((u - cu) * scale + size / 2).astype(int), margin, size - margin - 1)
+    py = ((v - cv) * scale + size / 2).astype(int)
+    if flip_v:
+        py = size - 1 - py
+    py = np.clip(py, margin, size - margin - 1)
+
+    img = np.full((size, size, 3), BG, np.uint8)
+    order = np.argsort(c)  # near/low drawn first so high sits on top
+    for i in order:
+        img[py[i]: py[i] + dot, px[i]: px[i] + dot] = (colour[i] * 255).astype(np.uint8)
+    return img
 
 
 def main() -> int:
@@ -100,10 +122,14 @@ def main() -> int:
     tiles.append(label(up(dep), "2. depth", "a 4th channel: worse than none"))
 
     cam = make_images(ARMS["dp3_pcd"], batch)[0].numpy()
-    tiles.append(label(cloud_tile(cam), "3. camera-frame cloud", "1 camera, no calibration"))
+    tiles.append(label(
+        scatter_tile(cam, ax_u=0, ax_v=1, colour_axis=2, flip_v=False),
+        "3. camera-frame cloud", "1 camera, colour = depth"))
 
     world = make_images(ARMS["dp3_world"], batch)[0].numpy()
-    tiles.append(label(cloud_tile(world, view="top"), "4. world-frame cloud", "4 cams fused, needs calibration"))
+    tiles.append(label(
+        scatter_tile(world, ax_u=0, ax_v=2, colour_axis=2),
+        "4. world-frame cloud", "4 cams fused, colour = height"))
 
     virt = make_images(ARMS["rvt"], batch, virtual_size=96)[0]
     v0 = (virt[0, :3].permute(1, 2, 0).numpy() * 255).astype(np.uint8)
