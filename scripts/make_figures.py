@@ -123,6 +123,70 @@ def main() -> None:
     fig.savefig(a.out / "fig1_sweeps.png", dpi=180)
     print(f"wrote {a.out/'fig1_sweeps.png'}")
 
+    # --- fig 2: where does the ordering change hands? ---------------------
+    cthetas = sorted({r["theta"] for r in rows if r["eps"] == 0})
+    cnoises = sorted({r["noise"] for r in rows if r["eps"] == 0})
+    if len(cthetas) > 1 and len(cnoises) > 1 and {"rvt", "rgb"} <= set(arms):
+        grid_rvt = np.full((len(cnoises), len(cthetas)), np.nan)
+        grid_rgb = np.full_like(grid_rvt, np.nan)
+        for i, c in enumerate(cnoises):
+            for j, t in enumerate(cthetas):
+                m1, _, n1 = agg(rows, "rvt", "theta", t, {"noise": c, "eps": 0.0})
+                m2, _, n2 = agg(rows, "rgb", "theta", t, {"noise": c, "eps": 0.0})
+                if n1 and n2:
+                    grid_rvt[i, j], grid_rgb[i, j] = m1, m2
+        adv = grid_rgb - grid_rvt          # positive: the 3D arm is ahead
+        lim = np.nanmax(np.abs(adv)) if np.isfinite(adv).any() else 1.0
+        fig, ax = plt.subplots(figsize=(6.2, 4.2))
+        im = ax.imshow(adv, cmap="RdBu", vmin=-lim, vmax=lim, origin="lower", aspect="auto")
+        ax.set_xticks(range(len(cthetas)), [f"{t:g}" for t in cthetas])
+        ax.set_yticks(range(len(cnoises)), [f"{c:g}" for c in cnoises])
+        ax.set_xlabel("camera perturbation $\\theta$ (deg)")
+        ax.set_ylabel("depth noise $c$")
+        ax.set_title("RGB error minus RVT error (mm)\nblue: RGB wins   red: the 3D arm wins", fontsize=10)
+        for i in range(len(cnoises)):
+            for j in range(len(cthetas)):
+                if np.isfinite(adv[i, j]):
+                    ax.text(j, i, f"{adv[i, j]:+.0f}", ha="center", va="center", fontsize=8)
+        fig.colorbar(im, ax=ax, label="mm")
+        fig.tight_layout()
+        fig.savefig(a.out / "fig2_crossover.png", dpi=180)
+        print(f"wrote {a.out/'fig2_crossover.png'}")
+
+    # --- fig 3: the two keyposes that decide the task ----------------------
+    phases = [("trans_mm_median_grasp", "grasp"), ("trans_mm_median_release", "release"),
+              ("trans_mm_median_transit", "transit")]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
+    for ax, (point, title) in zip(axes, (
+            ({"theta": 0.0, "eps": 0.0, "noise": 0.0}, "nominal"),
+            ({"theta": max(thetas), "eps": 0.0, "noise": 0.0}, f"theta = {max(thetas):g} deg"))):
+        width = 0.8 / len(phases)
+        for k, (metric, label) in enumerate(phases):
+            vals, errs = [], []
+            for arm in arms:
+                key, val = next(iter(point.items()))
+                others = {kk: vv for kk, vv in point.items() if kk != key}
+                m, e, n = agg(rows, arm, key, val, others)
+                sel = [r[metric] for r in rows if r["arm"] == arm
+                       and all(abs(r[kk] - vv) < 1e-12 for kk, vv in point.items())
+                       and np.isfinite(r.get(metric, np.nan))]
+                vals.append(np.mean(sel) if sel else np.nan)
+                errs.append(np.std(sel, ddof=1) / np.sqrt(len(sel)) if len(sel) > 1 else 0.0)
+            x = np.arange(len(arms)) + k * width - 0.4 + width / 2
+            ax.bar(x, vals, width, yerr=errs, capsize=2, label=label,
+                   color=["#2a9d5c", "#d94f3d", "#8a8a8a"][k], alpha=0.9)
+        ax.set_xticks(range(len(arms)), [LABEL[x] for x in arms], rotation=30, ha="right", fontsize=8)
+        ax.set_title(title, fontsize=10)
+        ax.grid(alpha=0.25, lw=0.6, axis="y")
+        ax.spines[["top", "right"]].set_visible(False)
+    axes[0].set_ylabel("translation error (mm, median)")
+    axes[0].legend(fontsize=8, frameon=False)
+    fig.suptitle("Averaging over the trajectory hides the two keyposes that decide the task",
+                 fontsize=11)
+    fig.tight_layout()
+    fig.savefig(a.out / "fig3_phases.png", dpi=180)
+    print(f"wrote {a.out/'fig3_phases.png'}")
+
     # table
     lines = ["| arm | nominal | theta=30 | eps=5 | c=0.008 |", "|---|---|---|---|---|"]
     for arm in arms:

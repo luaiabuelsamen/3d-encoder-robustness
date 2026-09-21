@@ -207,6 +207,11 @@ class MultiViewPolicy(nn.Module):
                 # free space above a surface and the depth buffer there belongs
                 # to whatever is behind it.
                 self.depth_head = nn.Sequential(nn.Linear(dim, dim // 2), nn.GELU(), nn.Linear(dim // 2, 1))
+                # Start at a depth in the middle of the working range rather than
+                # at softplus(0) = 0.69 m by accident, so the first predictions
+                # land inside the workspace instead of behind the table.
+                nn.init.zeros_(self.depth_head[-1].weight)
+                nn.init.constant_(self.depth_head[-1].bias, math.log(math.e**0.65 - 1))
 
     # --------------------------------------------------------------- forward
 
@@ -255,6 +260,12 @@ class MultiViewPolicy(nn.Module):
         conf = self.view_conf(vt.mean(2)).reshape(b, v)            # (B, V)
         out["heatmap_logits"] = logits.reshape(b, v, self.heatmap_size, self.heatmap_size)
         out["view_conf"] = conf
+        # A view that cannot see the target must not vote. Which views can is
+        # known at training time (project the target and check), so the
+        # confidence head is supervised directly rather than being left to
+        # discover it through the weighted average -- without that, a wrist
+        # camera pointing at the gripper drags every prediction toward whatever
+        # it happens to be looking at.
         out["peak"] = peak.reshape(b, v)
 
         if self.spec.decode == "orthographic":
@@ -423,8 +434,12 @@ def policy_loss(out: dict, batch: dict, spec: ArmSpec, model: MultiViewPolicy) -
             d_l = F.smooth_l1_loss(
                 F.softplus(out["pred_depth"])[valid] + 0.05, z[valid], beta=0.02
             ) if valid.any() else logits.sum() * 0.0
-            total = total + 0.2 * d_l
+            conf_l = F.binary_cross_entropy_with_logits(
+                out["view_conf"], valid.to(out["view_conf"].dtype)
+            )
+            total = total + 0.2 * d_l + 0.2 * conf_l
             parts["depth"] = d_l.detach()
+            parts["conf"] = conf_l.detach()
         total = total + 0.5 * hm
         parts["heatmap"] = hm.detach()
 

@@ -27,7 +27,7 @@ from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa
 
 IMAGE = 96
 N_EPISODES = 4
-STEPS = 120
+STEPS = 250
 
 
 def main() -> int:

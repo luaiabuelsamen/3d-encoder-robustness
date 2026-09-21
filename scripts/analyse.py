@@ -130,6 +130,59 @@ def main() -> None:
     for e in sorted({r["eps"] for r in rows if r["eps"] > 0}):
         compare(rows, f"rvt vs rgb at eps={e:g} deg", "rvt", "rgb", {"eps": e}, "a<b", out)
 
+    out += ["", "### 3b. Is that cost predictable without training anything?", ""]
+    out.append(
+        "A rotation of eps about a camera displaces every reconstructed point by "
+        "about `d sin(eps)`, where `d` is the camera-to-workspace distance. If a "
+        "canonicalised policy's error under miscalibration is just that rigid "
+        "displacement carried through, then its calibration budget can be computed "
+        "from the rig's geometry before a single epoch is trained. The prediction "
+        "below is made from the nominal rig alone -- no fitted constants."
+    )
+    from rvt_lerobot.render.rig import NOMINAL_RIG, WORKSPACE_CENTRE
+
+    d = float(np.mean([
+        np.linalg.norm(pose.eye - WORKSPACE_CENTRE) for pose in NOMINAL_RIG.values()
+    ]))
+    out.append("")
+    out.append(f"Camera-to-workspace distance d = {d*1000:.0f} mm (nominal rig).")
+    out.append("")
+    out.append("| eps (deg) | predicted d sin(eps) + 1 mm/deg | rvt measured | xyz_real measured | rgb measured |")
+    out.append("|---|---|---|---|---|")
+    ratios = []
+    for e in sorted({r["eps"] for r in rows if r["eps"] > 0}):
+        pred = d * np.sin(np.deg2rad(e)) * 1000 + e  # the operator also shifts 1 mm/deg
+        cells = []
+        for arm in ("rvt", "xyz_real", "rgb"):
+            v = seeds_at(rows, arm, eps=e)
+            cells.append(f"{v.mean():.1f}" if len(v) else "--")
+        v = seeds_at(rows, "rvt", eps=e)
+        base = seeds_at(rows, "rvt", eps=0.0)
+        if len(v) and len(base):
+            excess = max(0.0, v.mean() - base.mean())
+            ratios.append(excess / pred)
+        out.append(f"| {e:g} | {pred:.1f} | " + " | ".join(cells) + " |")
+    if ratios:
+        out.append("")
+        out.append(
+            f"Excess error over nominal, divided by the geometric prediction: "
+            f"mean {np.mean(ratios):.2f}, range {min(ratios):.2f}-{max(ratios):.2f}. "
+            "A ratio near 1 means the miscalibration cost is exactly the rigid "
+            "displacement and nothing else; well below 1 means the policy absorbs "
+            "part of it (proprioception, or a prior over where keyposes live)."
+        )
+        rgb_nom = seeds_at(rows, "rgb", eps=0.0)
+        if len(rgb_nom):
+            tol = np.rad2deg(np.arcsin(min(1.0, rgb_nom.mean() / 1000 / d)))
+            out.append("")
+            out.append(
+                f"**Calibration budget.** An RGB policy on this task sits at "
+                f"{rgb_nom.mean():.1f} mm. Setting `d sin(eps) = {rgb_nom.mean():.1f} mm` "
+                f"gives eps* = {tol:.1f} deg: beyond roughly that much calibration "
+                "error, the geometry a 3D encoder is built on costs more than it pays, "
+                "and it can be computed from a tape measure."
+            )
+
     out += ["", "## 4. Depth noise", ""]
     for c in sorted({r["noise"] for r in rows if r["noise"] > 0}):
         compare(rows, f"rvt vs rgb at c={c:g}", "rvt", "rgb", {"noise": c}, "a<b", out)
