@@ -42,6 +42,20 @@ from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa
 AUG_THETA_DEG = 15.0
 
 
+def save(run, model, arm, seed, args, n_par, history, step):
+    run.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {"state_dict": model.state_dict(), "arm": arm, "seed": seed,
+         "image": args.image, "patch": args.patch, "step": step},
+        run / "model.pt",
+    )
+    (run / "history.json").write_text(
+        json.dumps({"arm": arm, "seed": seed, "params": n_par,
+                    "steps_done": step, "steps_planned": args.steps,
+                    "history": history}, indent=2)
+    )
+
+
 def train_one(arm, seed, cache, val, args, device):
     spec = ARMS[arm]
     torch.manual_seed(seed)
@@ -54,6 +68,7 @@ def train_one(arm, seed, cache, val, args, device):
         opt, max_lr=args.lr, total_steps=args.steps, pct_start=0.05
     )
 
+    run = args.out / f"{arm}_s{seed}"
     history, t0 = [], time.time()
     for step in range(1, args.steps + 1):
         batch = cache.batch(rng.integers(0, cache.n, size=args.batch))
@@ -72,22 +87,16 @@ def train_one(arm, seed, cache, val, args, device):
             history.append(m)
             print(
                 f"    step {step:5d}  loss {float(loss):7.4f}  val {m['trans_mm_median']:6.1f} mm "
-                f"(median) rot {m['rot_deg_median']:5.1f} deg  grip {m['grip_acc']:.3f}  "
-                f"s@10 {m['success_10mm']:.2f}  [{time.time()-t0:.0f}s]",
+                f"(median) grasp {m['trans_mm_median_grasp']:6.1f}  rot {m['rot_deg_median']:5.1f} deg  "
+                f"grip {m['grip_acc']:.3f}  s@10 {m['success_10mm']:.2f}  [{time.time()-t0:.0f}s]",
                 flush=True,
             )
+            # Checkpoint at every evaluation, not only at the end. This machine
+            # is shared and a run that is interrupted at step 4500 of 5000
+            # should cost nothing.
+            save(run, model, arm, seed, args, n_par, history, step)
 
-    run = args.out / f"{arm}_s{seed}"
-    run.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {"state_dict": model.state_dict(), "arm": arm, "seed": seed,
-         "image": args.image, "patch": args.patch},
-        run / "model.pt",
-    )
-    (run / "history.json").write_text(
-        json.dumps({"arm": arm, "seed": seed, "params": n_par,
-                    "steps": args.steps, "history": history}, indent=2)
-    )
+    save(run, model, arm, seed, args, n_par, history, args.steps)
     return history[-1] if history else {}
 
 
@@ -126,26 +135,51 @@ def main() -> None:
         return ConditionCache(arrays, device=device)
 
     val = render(val_eps, val_samples, Condition(seed=999), "val")
-    nominal = render(train_eps, train_samples, Condition(seed=0), "train/nominal")
-    augmented = None
-    if any(ARMS[x].camera_aug for x in arms):
-        augmented = render(
-            train_eps, train_samples,
-            Condition(theta_deg=AUG_THETA_DEG, theta_random=True, seed=0),
-            "train/camera-aug",
-        )
 
+    # Two phases, nominal then augmented, so only one training cache is resident
+    # at a time. Each is about 1.8 GB for ten thousand four-view RGBD frames and
+    # this machine has roughly eight free, shared with the GPU; holding both
+    # plus the model and its activations is how a ten-hour run dies at hour six.
     summary = []
-    for arm in arms:
-        cache = augmented if ARMS[arm].camera_aug else nominal
+
+    def phase(label, cond, phase_arms):
+        nonlocal summary
+        # Seed-major, not arm-major. If a long run has to be stopped, this
+        # leaves every arm trained at the seeds that finished rather than some
+        # arms at three seeds and others at none -- the first is a smaller
+        # study, the second is not a study at all.
+        todo = []
         for seed in seeds:
-            if (a.out / f"{arm}_s{seed}" / "model.pt").is_file():
-                print(f"  skip {arm} seed {seed} (already trained)", flush=True)
-                continue
+            for arm in phase_arms:
+                hist = a.out / f"{arm}_s{seed}" / "history.json"
+                if hist.is_file():
+                    done = json.loads(hist.read_text())
+                    if done.get("steps_done", 0) >= done.get("steps_planned", 0):
+                        print(f"  skip {arm} seed {seed} (trained to {done['steps_done']})",
+                              flush=True)
+                        continue
+                todo.append((arm, seed))
+        if not todo:
+            return
+        cache = render(train_eps, train_samples, cond, label)
+        for arm, seed in todo:
             print(f"  === {arm} seed {seed} ===", flush=True)
             final = train_one(arm, seed, cache, val, a, device)
             summary.append({"arm": arm, "seed": seed, **final})
             (a.out / "summary.json").write_text(json.dumps(summary, indent=2))
+        del cache
+        import gc
+
+        gc.collect()
+        if device == "cuda":
+            torch.cuda.empty_cache()
+
+    phase("train/nominal", Condition(seed=0), [x for x in arms if not ARMS[x].camera_aug])
+    phase(
+        "train/camera-aug",
+        Condition(theta_deg=AUG_THETA_DEG, theta_random=True, seed=0),
+        [x for x in arms if ARMS[x].camera_aug],
+    )
     print("done")
 
 
