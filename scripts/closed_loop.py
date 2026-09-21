@@ -17,6 +17,24 @@ means nothing without them:
   a policy that fails here fails on its predictions.
 * **the scripted expert** -- its own full routine, which is the ceiling.
 
+**This evaluation is not deterministic, and 30 episodes is not enough.** The
+same checkpoint run twice in the same process, on scenes drawn from the same
+seed, scored 0.47 and 0.53 picked; across four runs it scored 0.33 to 0.60.
+Nothing in the harness is seeded wrongly -- the scene and its RNG are rebuilt
+per arm -- but rendering and inference on the GPU are not bit-reproducible, and
+this is a closed loop: a sub-millimetre difference in one predicted keypose
+changes the contact that follows, which changes the next observation. Small
+perturbations do not stay small.
+
+The observed spread (sd 0.115 over four runs) is close to the binomial standard
+error at n = 30 and p = 0.48, which is 0.091, so most of it is ordinary
+sampling noise rather than drift. The consequence is the same either way: at
+n = 30 a single number carries about +-9 points at one sigma, which is wider
+than most differences worth reporting. **Use several hundred episodes, or
+report a mean over repeats with an interval.** A single 30-episode run is a
+diagnostic, not a result -- and it is easy to mistake a lucky draw for an
+effect.
+
 One thing the executor knows that the policy does not: the approach to a grasp
 is made with the tool frame set to the midpoint of the OPEN jaw gap rather than
 the TCP. Descending on the TCP drives the fixed pad down the side of the block
