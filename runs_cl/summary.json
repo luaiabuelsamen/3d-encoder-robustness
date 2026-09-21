@@ -42,5 +42,27 @@
     "step": 2500,
     "loss": 0.07532193511724472,
     "seconds": 560.5358543395996
+  },
+  {
+    "arm": "rvt",
+    "seed": 0,
+    "trans_mm_median_grasp": 1.8749744892120361,
+    "n_grasp": 60,
+    "trans_mm_median_release": 3.117598295211792,
+    "n_release": 60,
+    "trans_mm_median_transit": 5.396280765533447,
+    "n_transit": 543,
+    "n": 663,
+    "trans_mm_mean": 7.628265380859375,
+    "trans_mm_median": 4.461831569671631,
+    "trans_mm_p90": 17.92149543762207,
+    "rot_deg_median": 14.947529792785645,
+    "grip_acc": 0.9954751133918762,
+    "success_10mm": 0.746606334841629,
+    "success_20mm": 0.918552036199095,
+    "success_50mm": 0.9939668174962293,
+    "step": 2500,
+    "loss": 1.5368419885635376,
+    "seconds": 5940.007316112518
   }
 ]

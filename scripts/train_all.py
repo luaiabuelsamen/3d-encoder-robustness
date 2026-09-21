@@ -66,6 +66,7 @@ def fingerprint(arm: str, args) -> dict:
         # one trained with it, and the difference changes no tensor shape, so
         # nothing else would notice.
         "home_transition": True,
+        "first_weight": args.first_weight,
     }
 
 
@@ -141,6 +142,8 @@ def main() -> None:
     p.add_argument("--image", type=int, default=96)
     p.add_argument("--patch", type=int, default=16)
     p.add_argument("--per-segment", type=int, default=2)
+    p.add_argument("--first-weight", type=int, default=1,
+                   help="repeat the home -> first-keypose transition this many times")
     p.add_argument("--eval-every", type=int, default=1000)
     p.add_argument("--allow-cpu", action="store_true")
     a = p.parse_args()
@@ -152,7 +155,8 @@ def main() -> None:
 
     scene = MultiCamScene(seed=0, image_size=a.image)
     train_eps, val_eps = C.load(a.episodes), C.load(a.val_episodes)
-    train_samples = build_samples(train_eps, np.random.default_rng(0), per_segment=a.per_segment)
+    train_samples = build_samples(train_eps, np.random.default_rng(0),
+                                  per_segment=a.per_segment, first_weight=a.first_weight)
     val_samples = build_samples(val_eps, np.random.default_rng(12345), per_segment=1)
 
     def available_gb() -> float:

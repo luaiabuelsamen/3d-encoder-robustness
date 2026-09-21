@@ -58,6 +58,7 @@ def build_samples(
     episodes: list[Episode],
     rng: np.random.Generator,
     per_segment: int = 2,
+    first_weight: int = 1,
 ) -> list[Sample]:
     """Observation/target pairs following RVT's next-keyframe convention.
 
@@ -79,10 +80,17 @@ def build_samples(
             # the very first step of any rollout. Measured: a policy scoring
             # 3.6 mm on keyframe-to-keyframe prediction commanded a grasp at the
             # home pose, closed on air, and carried an empty gripper to the end.
-            out.append(Sample(i, 0, int(kf[0])))
-            for _ in range(per_segment - 1):
-                if kf[0] > 2:
-                    out.append(Sample(i, int(rng.integers(1, kf[0])), int(kf[0])))
+            # `first_weight` repeats this transition. It is one sample in twelve
+            # and by far the hardest -- 48 mm against 9.7 mm for every other
+            # step -- because it is the only one whose answer is not partly
+            # encoded in the arm's own configuration. Left at natural frequency
+            # it is both the rarest and the hardest thing the policy has to do,
+            # which is the wrong way round.
+            for _ in range(first_weight):
+                out.append(Sample(i, 0, int(kf[0])))
+                for _ in range(per_segment - 1):
+                    if kf[0] > 2:
+                        out.append(Sample(i, int(rng.integers(1, kf[0])), int(kf[0])))
         for a, b in zip(kf[:-1], kf[1:]):
             out.append(Sample(i, int(a), int(b)))
             for _ in range(per_segment - 1):

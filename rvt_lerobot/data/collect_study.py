@@ -48,6 +48,7 @@ class Episode:
     """One scripted demonstration, stored as states rather than pictures."""
 
     qpos: np.ndarray            # (T, nq) float32 -- full physics state
+    ctrl: np.ndarray            # (T, nu) float32 -- the commanded joint targets
     jaw_cmd: np.ndarray         # (T,) float32 -- commanded jaw angle
     tcp: np.ndarray             # (T, 3) float32 -- tool centre point, world
     jaw_rot: np.ndarray         # (T, 3, 3) float32 -- Fixed_Jaw orientation
@@ -93,12 +94,17 @@ def run_episode(_unused, expert: ScriptedExpert) -> Episode:
     """Run one scripted episode, recording everything needed to replay it."""
     scene = expert.scene
     qpos: list[np.ndarray] = []
+    ctrl: list[np.ndarray] = []
     jaw: list[float] = []
     tcp: list[np.ndarray] = []
     rot: list[np.ndarray] = []
 
     def hook(s) -> None:
         qpos.append(s.data.qpos.copy())
+        # The full control vector, not just the jaw. A dense-action policy --
+        # which is what DP3 and ACT actually are -- predicts these directly, and
+        # without them the dataset can only support the keypose formulation.
+        ctrl.append(s.data.ctrl.copy())
         jaw.append(float(s.data.ctrl[5]))
         tcp.append(s.tcp())
         rot.append(s.data.xmat[s.ids.jaw].reshape(3, 3).copy())
@@ -111,6 +117,7 @@ def run_episode(_unused, expert: ScriptedExpert) -> Episode:
     jaw_arr = np.asarray(jaw, dtype=np.float32)
     return Episode(
         qpos=qpos_arr,
+        ctrl=np.asarray(ctrl, dtype=np.float32),
         jaw_cmd=jaw_arr,
         tcp=np.asarray(tcp, dtype=np.float32),
         jaw_rot=np.asarray(rot, dtype=np.float32),
@@ -183,6 +190,7 @@ def save(path: pathlib.Path, episodes: list[Episode]) -> None:
         lengths=lengths,
         kf_lengths=kf_lengths,
         qpos=np.concatenate([e.qpos for e in episodes]),
+        ctrl=np.concatenate([e.ctrl for e in episodes]),
         jaw_cmd=np.concatenate([e.jaw_cmd for e in episodes]),
         tcp=np.concatenate([e.tcp for e in episodes]),
         jaw_rot=np.concatenate([e.jaw_rot for e in episodes]).reshape(-1, 9),
@@ -210,6 +218,7 @@ def load(path: pathlib.Path) -> list[Episode]:
     z = np.load(path)
     lengths, kf_lengths = z["lengths"], z["kf_lengths"]
     qpos, jaw_cmd, tcp = z["qpos"], z["jaw_cmd"], z["tcp"]
+    ctrl = z["ctrl"] if "ctrl" in z else np.zeros((len(qpos), 6), dtype=np.float32)
     jaw_rot, keyframes = z["jaw_rot"], z["keyframes"]
     block_size, block_mass = z["block_size"], z["block_mass"]
     block_friction, box_pos = z["block_friction"], z["box_pos"]
@@ -224,6 +233,7 @@ def load(path: pathlib.Path) -> list[Episode]:
         out.append(
             Episode(
                 qpos=qpos[a:b],
+                ctrl=ctrl[a:b],
                 jaw_cmd=jaw_cmd[a:b],
                 tcp=tcp[a:b],
                 jaw_rot=jaw_rot[a:b].reshape(-1, 3, 3),

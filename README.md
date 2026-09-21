@@ -25,6 +25,14 @@ This study takes them apart on one task, with one backbone, one training recipe,
 and one output space, and then stresses all of it along three axes that a real
 deployment actually travels.
 
+![pipeline](figures/pipeline.png)
+
+*The same instant, as each encoder sees it. Rendered by the study's own code
+paths, so this is literally what the policies were trained on. Left to right:
+RGB; depth as a fourth channel; the camera-frame point cloud (one camera, no
+calibration); the world-frame cloud (four cameras fused, calibration required);
+and RVT's canonical re-rendering of that cloud. Cloud colour is height.*
+
 > **Status.** Apparatus complete and self-tested. Results below are **seed 0 of
 > 3**; seeds 1–2 and the depth-noise axis are running. `results/findings.md` is
 > generated, not written — including the comparisons that fail to resolve.
