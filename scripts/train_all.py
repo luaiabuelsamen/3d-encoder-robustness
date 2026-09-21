@@ -38,6 +38,7 @@ from rvt_lerobot.data.views import Condition, build_samples, render_condition  #
 from rvt_lerobot.envs.multicam import MultiCamScene  # noqa: E402
 from rvt_lerobot.evaluate import evaluate  # noqa: E402
 from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa: E402
+from rvt_lerobot.render.rig import ALL_CAMERAS as R_ALL  # noqa: E402
 
 AUG_THETA_DEG = 15.0
 
@@ -127,11 +128,32 @@ def main() -> None:
     train_samples = build_samples(train_eps, np.random.default_rng(0), per_segment=a.per_segment)
     val_samples = build_samples(val_eps, np.random.default_rng(12345), per_segment=1)
 
+    def available_gb() -> float:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) / 1e6
+        return float("nan")
+
     def render(eps, samples, cond, label):
+        # Report memory around every render. The first attempt at this run was
+        # killed by the OOM killer here, with no traceback -- the log simply
+        # stopped -- because measurement scripts were running concurrently and
+        # a 1.8 GB allocation on a 15.6 GB box with a unified-memory GPU does
+        # not always get the page cache reclaimed in time. If it happens again,
+        # these two numbers say so immediately.
+        need = len(samples) * len(R_ALL) * a.image * a.image * 5 / 1e9
+        before = available_gb()
+        print(f"[{label}] rendering {len(samples)} samples, ~{need:.2f} GB needed, "
+              f"{before:.2f} GB available", flush=True)
+        if before < need * 1.6:
+            print(f"  WARNING: only {before:.2f} GB available for a {need:.2f} GB "
+                  f"cache; check nothing else is running", flush=True)
         t0 = time.time()
         arrays = render_condition(scene, eps, samples, cond)
         gb = sum(x.nbytes for x in arrays.values()) / 1e9
-        print(f"[{label}] {len(samples)} samples, {gb:.2f} GB, {time.time()-t0:.0f}s", flush=True)
+        print(f"[{label}] done: {gb:.2f} GB in {time.time()-t0:.0f}s, "
+              f"{available_gb():.2f} GB still available", flush=True)
         return ConditionCache(arrays, device=device)
 
     val = render(val_eps, val_samples, Condition(seed=999), "val")
