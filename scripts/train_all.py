@@ -67,6 +67,12 @@ def fingerprint(arm: str, args) -> dict:
         # nothing else would notice.
         "home_transition": True,
         "first_weight": args.first_weight,
+        # rot_to_6d packed the two columns row-major, so every rotation target
+        # decoded with its yaw negated. Checkpoints trained against the old
+        # packing predict a different quantity and cannot be compared with these,
+        # and nothing about the change alters a tensor shape -- which is exactly
+        # the case this fingerprint exists to catch.
+        "rot6_packing": "columns",
     }
 
 

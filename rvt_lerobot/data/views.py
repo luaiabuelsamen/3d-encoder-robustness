@@ -105,8 +105,25 @@ def rot_to_6d(rot: np.ndarray) -> np.ndarray:
     Rotation matrices and quaternions both have discontinuities as regression
     targets (Zhou et al., CVPR 2019); the first two columns do not, and the
     third is recovered by cross product.
+
+    The two columns are packed **one after the other**, which is what
+    `rot6d_to_matrix` expects. The obvious spelling, `rot[..., :, :2].reshape(
+    ..., 6)`, is row-major and interleaves them -- it produces
+    `[R00, R01, R10, R11, R20, R21]`, so the decoder's "first column" is
+    actually `[R00, R01, R10]`, a mix of the first row and the first column.
+
+    That mistake is close to invisible. Training still converges, because the
+    network simply learns whatever vector it is shown; and the rotation metric
+    still looks healthy, because `geodesic_degrees` sends the prediction AND the
+    target through the same wrong decode, so the error cancels. It only surfaces
+    where a predicted rotation is used for something physical. Here that is the
+    executed grasp heading, and for a rotation about z this packing decodes to
+    `-yaw`: the gripper approached every block mirrored about the x-axis. The
+    closed loop picked 0.10 while the validation error read 6.4 mm.
+
+    `check_conventions.py` now asserts the round trip.
     """
-    return rot[..., :, :2].reshape(*rot.shape[:-2], 6)
+    return np.concatenate([rot[..., :, 0], rot[..., :, 1]], axis=-1)
 
 
 def targets_for(episodes: list[Episode], samples: list[Sample]) -> dict[str, np.ndarray]:

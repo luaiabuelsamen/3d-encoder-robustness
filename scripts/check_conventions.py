@@ -19,6 +19,7 @@ import pathlib
 import sys
 
 import numpy as np
+import torch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
@@ -76,6 +77,35 @@ def block_centroid(scene, block_mask, obs, cam) -> np.ndarray | None:
     if m.sum() < 15:
         return None
     return R.unproject(o.depth, o.K, o.T)[m].mean(0)
+
+
+def check_rot6d_roundtrip() -> None:
+    """The 6D rotation encoding must survive a round trip.
+
+    This is the cheapest possible test and it was missing, which cost a whole
+    closed-loop result. `rot_to_6d` packed the two columns row-major while
+    `rot6d_to_matrix` read them column-major, so a decoded rotation about z came
+    back with its yaw negated. Nothing upstream noticed: the network learns
+    whatever vector it is given, and the rotation metric decodes prediction and
+    target the same wrong way so the error cancels exactly. The only symptom was
+    the robot approaching every block mirrored, at 0.10 picked against an
+    oracle's 0.97.
+    """
+    from rvt_lerobot.data.views import rot_to_6d
+    from rvt_lerobot.evaluate import rot6d_to_matrix
+
+    rng = np.random.default_rng(0)
+    worst_r, worst_yaw = 0.0, 0.0
+    for _ in range(200):
+        q, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+        if np.linalg.det(q) < 0:
+            q[:, 0] *= -1
+        back = rot6d_to_matrix(torch.tensor(rot_to_6d(q))[None])[0].numpy()
+        worst_r = max(worst_r, float(np.abs(q - back).max()))
+        worst_yaw = max(worst_yaw, abs(float(np.degrees(
+            np.arctan2(q[1, 0], q[0, 0]) - np.arctan2(back[1, 0], back[0, 0])))))
+    check("rot6d round trip recovers the matrix", worst_r < 1e-6, f"max err {worst_r:.2e}")
+    check("rot6d round trip preserves heading", worst_yaw < 1e-6, f"max {worst_yaw:.2e} deg")
 
 
 def main() -> int:
@@ -198,6 +228,8 @@ def main() -> int:
         d = np.clip((o.depth - 0.3) / 1.0, 0, 1)
         Image.fromarray((255 * (1 - d)).astype(np.uint8)).save(out / f"{cam}_depth.png")
     print(f"\nwrote frames to {out}/")
+    check_rot6d_roundtrip()
+
     print("FAILURES:", fails if fails else "none")
     return 1 if fails else 0
 
