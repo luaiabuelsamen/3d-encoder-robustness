@@ -197,6 +197,40 @@ def main() -> None:
     for c in sorted({r["noise"] for r in rows if r["noise"] > 0}):
         compare(rows, f"rvt vs rgb at c={c:g}", "rvt", "rgb", {"noise": c}, "a<b", out)
 
+    out += ["", "## When is looking worse than not looking?", ""]
+    out.append(
+        "The proprioceptive arm ignores the cameras, so it is flat along every "
+        "stress axis. That makes it a free reference line with an unusually "
+        "concrete meaning: the stress level at which a sighted arm crosses it is "
+        "the point where consuming the sensors is worse than ignoring them. A "
+        "practitioner with a drifting rig cares about exactly this number."
+    )
+    out.append("")
+    for axis, values, fixed in (
+        ("theta", sorted({r["theta"] for r in rows}), {"eps": 0.0, "noise": 0.0}),
+        ("eps", sorted({r["eps"] for r in rows}), {"theta": 0.0, "noise": 0.0}),
+        ("noise", sorted({r["noise"] for r in rows}), {"theta": 0.0, "eps": 0.0}),
+    ):
+        floor = seeds_at(rows, "proprio", **{axis: values[0]}, **fixed)
+        if not len(floor):
+            continue
+        out.append(f"**{axis}** (proprio floor {floor.mean():.1f} mm):")
+        for arm in arms:
+            if arm == "proprio":
+                continue
+            crossed = None
+            for v in values:
+                vals = seeds_at(rows, arm, **{axis: v}, **fixed)
+                if len(vals) and vals.mean() > floor.mean():
+                    crossed = v
+                    break
+            out.append(
+                f"- `{arm}`: " + (f"worse than ignoring the cameras at {axis} = {crossed:g}"
+                                  if crossed is not None
+                                  else f"still better than ignoring the cameras at {axis} = {values[-1]:g} (never crosses)")
+            )
+        out.append("")
+
     out += ["", "## Crossover", ""]
     cross = []
     for th in sorted({r["theta"] for r in rows}):
