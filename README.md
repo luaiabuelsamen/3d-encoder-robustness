@@ -32,9 +32,22 @@ deployment actually travels.
 
 ---
 
-## Result 1: a 3D encoder's calibration cost is geometry, not learning
+## Result 1: 3D buys invariance to where the cameras are, and pays for it in knowing where they are
 
-This one needs no training at all, and it is the sharpest thing here.
+This one needs no training at all, and it is the sharpest thing here. Two
+stresses that the literature routinely conflates, measured on the same
+reconstruction with the same metric:
+
+| | cameras moved by 30°, recalibrated | calibration wrong by 1° |
+|---|---|---|
+| displacement of the reconstructed block | **2.9 mm** | **9.1 mm** |
+
+A thirty-degree camera move costs almost nothing *provided the calibration
+follows*. One degree of stale calibration costs three times more. The
+representation is not "robust to viewpoint" — it is robust to viewpoint
+**conditional on calibration**, and that condition is doing all the work.
+
+![calibration law](figures/fig4_calibration_law.png)
 
 Hand a policy extrinsics that are wrong by ε degrees and every reconstructed
 point moves by an amount geometry fixes in advance:
@@ -47,7 +60,12 @@ where *d* is the camera-to-workspace distance. The π/4 is the mean sine of the
 angle between a uniformly random rotation axis and the line of sight — only the
 perpendicular component of a rotation moves a point along that ray.
 
-**Measured against that prediction, with zero fitted constants:**
+And unlike the left panel, the right one is flat: the same measurement under
+camera motion *with* recalibration gives 0.9 / 1.2 / 2.2 / 2.9 mm at θ = 5 /
+10 / 20 / 30°, and the between-camera disagreement does not move off its
+10.2 mm floor at all.
+
+**Measured against the prediction, with zero fitted constants:**
 
 | ε (deg) | predicted | measured, per camera | after fusing cameras | disagreement between cameras |
 |---|---|---|---|---|
@@ -73,8 +91,6 @@ twentyfold range of ε**. Three consequences:
    predicted displacement equal to whatever error an RGB policy achieves on your
    task, and solve for ε. Beyond that, the geometry a 3D encoder is built on
    costs more than it pays.
-
-![calibration law](figures/fig4_calibration_law.png)
 
 Note the ε = 0 row: the cameras already disagree by 10.2 mm with *perfect*
 calibration, because each sees a different surface of the block and depth is

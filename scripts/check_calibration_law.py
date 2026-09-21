@@ -132,13 +132,66 @@ def main() -> int:
         print(f"{eps:5g} {pred:10.1f} {rows[-1]['per_camera_mm']:11.1f} "
               f"{rows[-1]['fused_mm']:8.1f} {rows[-1]['disagreement_mm']:13.1f}")
 
+    # The complementary control on the same metric: move the cameras and let the
+    # calibration follow. If world-frame geometry is what these methods rely on,
+    # this curve must be FLAT where the miscalibration curve is linear. Without
+    # it, "the reconstruction moved" could just mean "something changed".
+    print(f"\n{'theta':>5s} {'displacement':>13s} {'disagreement':>13s}   "
+          f"(mm, cameras moved AND recalibrated)")
+
+    def centroids(obs):
+        """Per-camera block centroid in world coordinates, from this capture."""
+        out = []
+        for cam in R.MOVABLE_CAMERAS:
+            o = obs[cam]
+            mask = block_pixels(cam, o.depth)
+            if mask.sum() >= 10:
+                out.append(R.unproject(o.depth, o.K, o.T)[mask].mean(0))
+        return np.stack(out) if len(out) >= 2 else None
+
+    theta_rows = []
+    for theta in (0.0, 5.0, 10.0, 20.0, 30.0):
+        rng = np.random.default_rng(23)
+        moved_by, spread = [], []
+        for ep in episodes:
+            k = int(ep.keyframes[len(ep.keyframes) // 3])
+            m, ids = scene.model, scene.scene.ids
+            m.geom_size[ids.block_geom] = ep.block_size
+            m.body_pos[ids.box] = ep.box_pos
+
+            scene.set_rig(R.NOMINAL_RIG)
+            scene.restore(ep.qpos[k])
+            ref = centroids(scene.capture())
+
+            scene.set_rig(R.perturb_rig(R.NOMINAL_RIG, theta, rng))
+            scene.restore(ep.qpos[k])
+            moved = centroids(scene.capture())
+
+            if ref is None or moved is None:
+                continue
+            moved_by.append(np.linalg.norm(moved.mean(0) - ref.mean(0)))
+            spread.append(np.linalg.norm(moved - moved.mean(0), axis=1).mean())
+
+        theta_rows.append({
+            "theta": theta,
+            "displacement_mm": float(np.mean(moved_by) * 1000),
+            "disagreement_mm": float(np.mean(spread) * 1000),
+            "n": len(moved_by),
+        })
+        print(f"{theta:5g} {theta_rows[-1]['displacement_mm']:13.1f} "
+              f"{theta_rows[-1]['disagreement_mm']:13.1f}")
+    scene.set_rig(R.NOMINAL_RIG)
+
     out = pathlib.Path("results")
     out.mkdir(exist_ok=True)
     (out / "calibration_law.json").write_text(json.dumps(
-        {"d_mm": d_nominal * 1000, "frames": len(episodes), "rows": rows}, indent=2))
+        {"d_mm": d_nominal * 1000, "frames": len(episodes),
+         "miscalibrated": rows, "recalibrated": theta_rows}, indent=2))
 
     eps = np.array([r["eps"] for r in rows])
-    fig, ax = plt.subplots(figsize=(6.0, 4.0))
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.2), sharey=True)
+
+    ax = axes[0]
     fine = np.linspace(0, max(eps), 100)
     ax.plot(fine, [predict(d_nominal, e) for e in fine], "k--", lw=1.4,
             label="predicted from geometry (no fitted constants)")
@@ -148,14 +201,30 @@ def main() -> int:
             label="measured, after fusing cameras")
     ax.plot(eps, [r["disagreement_mm"] for r in rows], "^-", color="#e0851f",
             label="disagreement between cameras")
-    ax.set_xlabel("calibration error $\\epsilon$ (deg)")
+    ax.set_xlabel("calibration error $\\epsilon$ (deg)   — cameras have NOT moved")
     ax.set_ylabel("displacement of the reconstructed block (mm)")
-    ax.set_title("A 3D encoder's calibration cost is geometry, not learning", fontsize=11)
-    ax.axhline(20, color="#888", lw=0.8)
-    ax.text(0.15, 21, "block width", fontsize=8, color="#666")
-    ax.legend(fontsize=8, frameon=False)
-    ax.grid(alpha=0.25, lw=0.6)
-    ax.spines[["top", "right"]].set_visible(False)
+    ax.set_title("you do not know where the cameras are", fontsize=10)
+
+    ax = axes[1]
+    th = np.array([r["theta"] for r in theta_rows])
+    ax.plot(th, [r["displacement_mm"] for r in theta_rows], "s-", color="#2a9d5c",
+            label="measured displacement")
+    ax.plot(th, [r["disagreement_mm"] for r in theta_rows], "^-", color="#e0851f",
+            label="disagreement between cameras")
+    ax.set_xlabel("camera perturbation $\\theta$ (deg)   — calibration follows")
+    ax.set_title("the cameras moved, and you know it", fontsize=10)
+
+    for ax in axes:
+        ax.axhline(20, color="#888", lw=0.8)
+        ax.text(0.2, 22, "block width", fontsize=8, color="#666")
+        ax.legend(fontsize=8, frameon=False, loc="upper left")
+        ax.grid(alpha=0.25, lw=0.6)
+        ax.spines[["top", "right"]].set_visible(False)
+    fig.suptitle(
+        "Where a 3D representation is invariant, and where it is not: "
+        "30 deg of camera motion costs 2.9 mm; 1 deg of calibration error costs 9.1 mm",
+        fontsize=11,
+    )
     fig.tight_layout()
     fig.savefig("figures/fig4_calibration_law.png", dpi=180)
     print("\nwrote figures/fig4_calibration_law.png and results/calibration_law.json")

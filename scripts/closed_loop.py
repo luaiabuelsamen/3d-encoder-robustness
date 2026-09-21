@@ -148,7 +148,9 @@ def policy_rollout(scene, model, cond, rng, device, image) -> dict:
         yaw = float(np.arctan2(rot[1, 0], rot[0, 0]))
         want_open = bool(out["grip_logit"][0].item() > 0)
         ex.step(pos, yaw, want_open)
-        if s.block_in_box() and want_open and not ex.jaw_open is False:
+        # Stop once the block is in the container and the jaws have been opened
+        # there: the task is done and further keyposes can only knock it out.
+        if s.block_in_box() and ex.jaw_open:
             break
     return ex.outcome()
 

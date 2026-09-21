@@ -1,7 +1,7 @@
 {
   "d_mm": 670.820393249937,
   "frames": 60,
-  "rows": [
+  "miscalibrated": [
     {
       "eps": 0.0,
       "predicted_mm": 0.0,
@@ -48,6 +48,38 @@
       "per_camera_mm": 90.6163684598536,
       "fused_mm": 53.77139317382352,
       "disagreement_mm": 73.24870752478078,
+      "n": 60
+    }
+  ],
+  "recalibrated": [
+    {
+      "theta": 0.0,
+      "displacement_mm": 0.0,
+      "disagreement_mm": 10.206328578341248,
+      "n": 60
+    },
+    {
+      "theta": 5.0,
+      "displacement_mm": 0.8663583146140211,
+      "disagreement_mm": 10.102798058169547,
+      "n": 60
+    },
+    {
+      "theta": 10.0,
+      "displacement_mm": 1.20327388692232,
+      "disagreement_mm": 10.191730250077182,
+      "n": 60
+    },
+    {
+      "theta": 20.0,
+      "displacement_mm": 2.176941887287203,
+      "disagreement_mm": 10.277552309350089,
+      "n": 60
+    },
+    {
+      "theta": 30.0,
+      "displacement_mm": 2.8997174821672673,
+      "disagreement_mm": 10.354173383686929,
       "n": 60
     }
   ]
