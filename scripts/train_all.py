@@ -43,6 +43,27 @@ from rvt_lerobot.render.rig import ALL_CAMERAS as R_ALL  # noqa: E402
 AUG_THETA_DEG = 15.0
 
 
+def fingerprint(arm: str, args) -> dict:
+    """Everything that changes what a checkpoint MEANS, not just how good it is.
+
+    A resume-by-skip mechanism is only safe while the definition of the data and
+    the model is fixed. It was not: proprioception changed from joint angles to
+    PerAct's low_dim_state partway through, and the old proprio checkpoint was
+    silently kept because its history said 2500/2500. It then failed to load
+    with a shape mismatch -- which was lucky, because a change that did NOT
+    alter a tensor shape would have been kept and quietly averaged into the
+    results.
+    """
+    return {
+        "proprio_dim": 7 if ARMS[arm].full_proprio else 4,
+        "image": args.image,
+        "patch": args.patch,
+        "per_segment": args.per_segment,
+        "steps": args.steps,
+        "batch": args.batch,
+    }
+
+
 def save(run, model, arm, seed, args, n_par, history, step):
     run.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -53,6 +74,7 @@ def save(run, model, arm, seed, args, n_par, history, step):
     (run / "history.json").write_text(
         json.dumps({"arm": arm, "seed": seed, "params": n_par,
                     "steps_done": step, "steps_planned": args.steps,
+                    "fingerprint": fingerprint(arm, args),
                     "history": history}, indent=2)
     )
 
@@ -176,10 +198,16 @@ def main() -> None:
                 hist = a.out / f"{arm}_s{seed}" / "history.json"
                 if hist.is_file():
                     done = json.loads(hist.read_text())
-                    if done.get("steps_done", 0) >= done.get("steps_planned", 0):
+                    finished = done.get("steps_done", 0) >= done.get("steps_planned", 0)
+                    want = fingerprint(arm, a)
+                    same = done.get("fingerprint") == want
+                    if finished and same:
                         print(f"  skip {arm} seed {seed} (trained to {done['steps_done']})",
                               flush=True)
                         continue
+                    if finished and not same:
+                        print(f"  RETRAIN {arm} seed {seed}: it was trained under different "
+                              f"settings ({done.get('fingerprint')} != {want})", flush=True)
                 todo.append((arm, seed))
         if not todo:
             return

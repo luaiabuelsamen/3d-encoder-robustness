@@ -84,7 +84,14 @@ def load_models(runs: pathlib.Path, device: str, image: int):
         m = MultiViewPolicy(
             spec, image_size=blob.get("image", image), patch=blob.get("patch", 12)
         ).to(device)
-        m.load_state_dict(blob["state_dict"])
+        try:
+            m.load_state_dict(blob["state_dict"])
+        except RuntimeError as exc:
+            # A checkpoint left over from an earlier configuration. Name it and
+            # move on: losing one arm is recoverable, losing the whole grid an
+            # hour in is not.
+            print(f"  SKIPPING {d.name}: {str(exc).splitlines()[-1].strip()}", flush=True)
+            continue
         m.eval()
         models.append((blob["arm"], blob["seed"], m))
     return models
