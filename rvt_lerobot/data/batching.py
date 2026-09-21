@@ -28,6 +28,10 @@ NO_RETURN = FAR - 1e-3
 #: itself and need no such constant.
 NOMINAL_CAMERA_DISTANCE = 0.67
 
+#: Points per cloud for the DP3-style arms. The PR defaults to 1024; the paper
+#: reports 512-1024 and notes the encoder max-pools so more buys little.
+POINTCLOUD_POINTS = 1024
+
 
 class ConditionCache:
     """One rendered condition held in RAM, served as batches."""
@@ -63,6 +67,33 @@ def make_images(spec: ArmSpec, batch: dict[str, Tensor], virtual_size: int = 96)
     rgb = batch["rgb"].permute(0, 1, 4, 2, 3).float() / 255.0      # (B,V,3,H,W)
     depth = batch["depth_mm"].float() / 1000.0                     # (B,V,H,W)
     valid = (depth > 1e-3) & (depth < NO_RETURN)
+
+    if spec.source == "pointcloud":
+        # Built with the PULL REQUEST's own unproject and sampler, so this arm
+        # measures that code rather than a local reimplementation of it. The
+        # camera-frame variant never touches an extrinsic, which is the whole
+        # claim the PR's `frame` default rests on.
+        from ..vendor.lerobot_pointcloud import sample_points, unproject
+
+        b, v, h, w = depth.shape
+        if spec.world_frame_cloud:
+            # Several cameras may be fused, because a world frame is what makes
+            # their clouds commensurable.
+            pts = unproject(depth, batch["K"], batch["T"]).reshape(b, v * h * w, 3)
+            pts = pts - pts.new_tensor(WORKSPACE_CENTRE)
+            mask = valid.reshape(b, v * h * w)
+        else:
+            # ONE camera. Clouds from different cameras sit in different frames
+            # and concatenating them without extrinsics is meaningless -- the
+            # PR's own processor raises rather than do it, and this has to
+            # match or the arm would not be benchmarking the documented API.
+            # One RGBD camera is also the setup DP3 is designed around.
+            d0, k0 = depth[:, :1], batch["K"][:, :1]
+            pts = unproject(d0, k0).reshape(b, h * w, 3)
+            pts = pts - pts.new_tensor([0.0, 0.0, NOMINAL_CAMERA_DISTANCE])
+            mask = valid[:, :1].reshape(b, h * w)
+        cloud = sample_points(pts, mask, POINTCLOUD_POINTS)
+        return cloud / (WORKSPACE_EXTENT / 2)
 
     if spec.source == "real":
         if spec.channels == "rgb":

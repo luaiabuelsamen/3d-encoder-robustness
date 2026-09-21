@@ -59,6 +59,7 @@ class ArmSpec:
     decode: str        # "regress" | "unproject" | "orthographic"
     camera_aug: bool = False
     full_proprio: bool = False   # joint angles instead of PerAct's low_dim_state
+    world_frame_cloud: bool = False  # point-cloud arms only: fuse via extrinsics
 
     @property
     def proprio_key(self) -> str:
@@ -71,7 +72,7 @@ class ArmSpec:
 
     @property
     def n_views(self) -> int:
-        return {"none": 0, "real": 4, "virtual": 5}[self.source]
+        return {"none": 0, "real": 4, "virtual": 5, "pointcloud": 0}[self.source]
 
 
 ARMS: dict[str, ArmSpec] = {
@@ -90,6 +91,14 @@ ARMS: dict[str, ArmSpec] = {
     # miscalibration axis, like the RGB arms, and to degrade under camera motion,
     # unlike the canonicalised ones.
     "xyz_cam": ArmSpec("real", "rgbxyz_cam", "regress"),
+    # DP3's representation, running the ENCODER FROM THE LEROBOT PR verbatim:
+    # a sampled point cloud in the camera frame through a per-point MLP and a
+    # max-pool. Present so the code being proposed upstream is benchmarked on
+    # expert data in the same grid as everything else, rather than only
+    # unit-tested. `dp3_world` is the same encoder on a world-frame cloud,
+    # which is the choice the PR's `frame` argument exposes.
+    "dp3_pcd": ArmSpec("pointcloud", "rgb", "regress"),
+    "dp3_world": ArmSpec("pointcloud", "rgb", "regress", world_frame_cloud=True),
     "rgb_aug": ArmSpec("real", "rgb", "regress", camera_aug=True),
     "rvt_aug": ArmSpec("virtual", "rgbxyz", "orthographic", camera_aug=True),
     # Reported as a control, not as a competitor: what a blind policy achieves
@@ -213,6 +222,17 @@ class MultiViewPolicy(nn.Module):
         self.proprio = nn.Sequential(nn.Linear(proprio_dim, dim), nn.GELU(), nn.Linear(dim, dim))
         self.cls = nn.Parameter(torch.zeros(1, 1, dim))
 
+        if spec.source == "pointcloud":
+            # Imported from the LeRobot working tree on purpose: this arm exists
+            # to benchmark the code in the pull request, so a copy would defeat
+            # the point the moment either side changed.
+            from ..vendor.lerobot_pointcloud import PointCloudEncoder
+
+            self.pcd_encoder = PointCloudEncoder(
+                in_channels=3, hidden_sizes=(64, 128, 256),
+                out_features=dim, use_layernorm=True,
+            )
+
         if v:
             self.embed = PatchEmbed(spec.in_channels, dim, patch)
             self.pos = nn.Parameter(torch.zeros(1, self.grid * self.grid, dim))
@@ -252,6 +272,10 @@ class MultiViewPolicy(nn.Module):
         b = proprio.shape[0]
         tokens = [self.cls.expand(b, -1, -1), self.proprio(proprio).unsqueeze(1)]
         per_view = None
+
+        if self.spec.source == "pointcloud":
+            # images is (B, N, 3): one pooled cloud embedding, one token
+            tokens.append(self.pcd_encoder(images).unsqueeze(1))
 
         if self.spec.n_views:
             v = images.shape[1]

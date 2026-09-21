@@ -72,7 +72,10 @@ def main() -> int:
         opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
 
         images = make_images(spec, batch, virtual_size=IMAGE)
-        if images is not None and images.shape[1] != spec.n_views:
+        if spec.source == "pointcloud":
+            if images is None or images.ndim != 3 or images.shape[-1] != 3:
+                fails.append(f"{name}: expected (B, N, 3) cloud, got {tuple(images.shape)}")
+        elif images is not None and images.shape[1] != spec.n_views:
             fails.append(f"{name}: view count {images.shape[1]} != {spec.n_views}")
 
         t0 = time.time()
