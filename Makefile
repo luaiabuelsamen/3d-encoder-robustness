@@ -35,6 +35,7 @@ all: check data train grid figures
 check:
 	$(PY) scripts/check_conventions.py
 	$(PY) scripts/check_virtual_views.py
+	$(PY) scripts/check_noise.py
 	$(PY) scripts/smoke_arms.py
 
 data: $(DATA)/train.npz $(DATA)/val.npz $(DATA)/test.npz
