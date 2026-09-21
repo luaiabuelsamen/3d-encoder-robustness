@@ -155,7 +155,14 @@ def main() -> None:
         ax.set_yticks(range(len(cnoises)), [f"{c:g}" for c in cnoises])
         ax.set_xlabel("camera perturbation $\\theta$ (deg)")
         ax.set_ylabel("depth noise $c$")
-        ax.set_title("RGB error minus RVT error (mm)\nblue: RGB wins   red: the 3D arm wins", fontsize=10)
+        # adv = rgb_error - rvt_error, so POSITIVE means RGB is worse, i.e. the
+        # 3D arm wins. RdBu maps high to blue, so blue is the 3D arm. The label
+        # said the opposite and would have read exactly backwards.
+        ax.set_title(
+            "RGB error minus RVT error (mm)\n"
+            "blue: canonical 3D wins   red: plain RGB wins",
+            fontsize=10,
+        )
         for i in range(len(cnoises)):
             for j in range(len(cthetas)):
                 if np.isfinite(adv[i, j]):
