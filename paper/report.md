@@ -192,7 +192,54 @@ A practitioner's table falls out:
 | depth noisy or sensor cheap | anything but canonical re-rendering |
 | no depth | RGB regression, and do not bolt depth on as a channel |
 
-## 6. Limitations
+## 6. Result 4: the metric hides the only step that needs vision
+
+Millimetres are only meaningful once you know what they buy. Taking each
+demonstration's own keyposes, perturbing them by a known amount and executing
+through the same controller gives the conversion directly, with no policy in
+the loop:
+
+| injected keypose error | picked | placed |
+|---|---|---|
+| 0 mm | 0.88 | 0.88 |
+| 2 mm | 0.88 | 0.88 |
+| 5 mm | 0.88 | 0.88 |
+| 10 mm | 0.84 | 0.80 |
+| 20 mm | 0.72 | 0.68 |
+| 40 mm | 0.40 | 0.32 |
+
+There is no cliff. The task absorbs 5 mm without losing a single placement and
+degrades gracefully after. **So most of the differences in this report are
+below the task's tolerance**: RVT's 3.6 mm and a point cloud's 8.3 mm both
+place at 88%, and that gap is not worth anything here. What matters is the
+stressed regime — 17, 37, 70 mm — which sits on the slope.
+
+That should have predicted decent closed-loop performance from policies with
+5-10 mm error. It did not: they placed 0-7% against an oracle replay at 87%.
+The resolution is in which steps the error lives.
+
+| arm | home → first keypose | every other step | ratio |
+|---|---|---|---|
+| point cloud, 1 cam | 48.0 mm | 9.7 mm | **5.0×** |
+| RGB, regress | 53.3 mm | 21.3 mm | **2.5×** |
+
+The first keypose is the only one where the arm has not already been carried
+toward the object by a previous waypoint, so it is the only one whose answer is
+not partly encoded in the robot's own configuration. It is also one step in
+twelve, so it contributes about 8% of the reported average — and it is 2.5 to 5
+times worse than that average. At 48 mm the table above gives roughly 32%
+placement before any subsequent state has drifted off-distribution.
+
+**The aggregate keypose metric is dominated by steps where proprioception
+already constrains the answer, and it hides the single step that actually
+requires perception.** This is the same warning as the joint-angle control in
+§7, arriving from the other direction: a blind policy scores 6.2 mm because
+most steps do not need eyes, and the one that does is averaged away.
+
+For anyone building on this: report the first keypose separately, or report
+closed-loop success. The mean over a trajectory is not a perception metric.
+
+## 7. Limitations
 
 One task, one arm, simulation only. Small models (≈3 M parameters) trained for
 2500 steps under a fixed budget — absolute numbers would improve with more, but
@@ -208,7 +255,7 @@ intrinsic rather than careless: a world-frame action cannot be decoded through
 explicit geometry without extrinsics somewhere, so a camera-frame policy must
 learn the camera-to-robot map implicitly.
 
-**A benchmark warning that generalises.** A blind policy given joint angles
+**The benchmark warning, restated.** A blind policy given joint angles
 scores 6.2 mm — better than five of eight sighted encoders. Scripted
 demonstrations are a deterministic function of the scene, so by the time the
 arm reaches keyframe *k* its configuration already encodes where the object is.

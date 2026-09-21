@@ -142,7 +142,16 @@ def observe(scene: MultiCamScene, cond: Condition, rng, device: str) -> dict:
     return {k: v.to(device) for k, v in out.items()}
 
 
-def policy_rollout(scene, model, cond, rng, device, image) -> dict:
+def policy_rollout(scene, model, cond, rng, device, image, oracle_yaw: float | None = None) -> dict:
+    """Drive one episode with the policy.
+
+    `oracle_yaw` is a diagnostic, not a mode: substituting the grasp heading a
+    perfect policy would use, while leaving translation to the policy, isolates
+    how much of a closed-loop failure is rotation rather than position. This
+    gripper is known to be unforgiving about heading -- its fixed fingertip sits
+    11.9 mm off the tool centre across the closing axis, so a dozen degrees of
+    yaw error lands the tip on top of the block instead of beside it.
+    """
     s = scene.scene
     ex = Executor(s)
     for step in range(MAX_KEYPOSES):
@@ -164,6 +173,8 @@ def policy_rollout(scene, model, cond, rng, device, image) -> dict:
         # solve_ik aims the jaw's local X -- the closing axis -- along a heading,
         # which is exactly the first column of the predicted rotation
         yaw = float(np.arctan2(rot[1, 0], rot[0, 0]))
+        if oracle_yaw is not None:
+            yaw = oracle_yaw
         want_open = bool(out["grip_logit"][0].item() > 0)
         ex.step(pos, yaw, want_open)
         # Stop once the block is in the container and the jaws have been opened
@@ -173,13 +184,26 @@ def policy_rollout(scene, model, cond, rng, device, image) -> dict:
     return ex.outcome()
 
 
-def oracle_rollout(scene, episode) -> dict:
-    """Replay a demonstration's own keyposes through the same executor."""
+def oracle_rollout(scene, episode, pos_noise_mm: float = 0.0, rng=None) -> dict:
+    """Replay a demonstration's own keyposes through the same executor.
+
+    With `pos_noise_mm` the keyposes are perturbed by isotropic Gaussian noise
+    of that magnitude before execution. Sweeping it converts the study's
+    millimetre metric into task terms: it answers how accurate a keypose
+    prediction has to be before the jaws actually close on the block, using the
+    same executor and the same scenes, with no policy in the loop to confound
+    the answer.
+    """
     ex = Executor(scene.scene)
     for k in episode.keyframes:
         rot = episode.jaw_rot[k]
+        pos = episode.tcp[k].astype(float)
+        if pos_noise_mm > 0:
+            direction = rng.normal(size=3)
+            direction /= np.linalg.norm(direction)
+            pos = pos + direction * (pos_noise_mm / 1000.0)
         ex.step(
-            episode.tcp[k].astype(float),
+            pos,
             float(np.arctan2(rot[1, 0], rot[0, 0])),
             bool(episode.jaw_cmd[k] > GRIP_OPEN_THRESHOLD),
         )
@@ -208,6 +232,8 @@ def main() -> None:
     p.add_argument("--conditions", default="0,0,0;20,0,0;0,5,0;0,0,0.008")
     p.add_argument("--out", type=pathlib.Path, default=pathlib.Path("results/closed_loop.json"))
     p.add_argument("--allow-cpu", action="store_true")
+    p.add_argument("--oracle-yaw", action="store_true",
+                   help="diagnostic: use the expert's grasp heading, policy translation")
     a = p.parse_args()
 
     device = pick_device(allow_cpu=a.allow_cpu)
@@ -268,8 +294,14 @@ def main() -> None:
                 for _ in range(a.episodes):
                     scene.scene.reset()
                     scene.set_rig(R.perturb_rig(R.NOMINAL_RIG, cond.theta_deg, rng))
-                    res.append(policy_rollout(scene, model, cond, rng, device, a.image))
-                record(arm, seed, cond, res)
+                    yaw = None
+                    if a.oracle_yaw:
+                        # the heading the expert would choose for this block
+                        yaw = ScriptedExpert(scene.scene).choose_grasp_yaw(
+                            scene.scene.block_pos(), scene.scene.block_yaw()
+                        )[0]
+                    res.append(policy_rollout(scene, model, cond, rng, device, a.image, yaw))
+                record(arm + ("+oracle_yaw" if a.oracle_yaw else ""), seed, cond, res)
 
     print(f"\nwrote {a.out}")
 
