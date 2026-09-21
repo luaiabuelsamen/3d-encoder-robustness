@@ -115,18 +115,22 @@ class HeatmapHead(nn.Module):
     convolutional decoder uses, in its smallest honest form.
     """
 
-    def __init__(self, dim: int, in_ch: int, out_size: int) -> None:
+    def __init__(self, dim: int, in_ch: int, out_size: int, width: int = 64) -> None:
         super().__init__()
         self.out_size = out_size
+        # Channel widths are kept deliberately small. The decoder runs on
+        # batch x views images, so it is the most expensive part of the model by
+        # a wide margin, and a wide decoder buys resolution this study does not
+        # need: the heatmap is read with a soft-argmax against a Gaussian
+        # target, which localises well below one cell.
         self.up = nn.Sequential(
-            nn.Conv2d(dim, 128, 3, padding=1), nn.GELU(),
+            nn.Conv2d(dim, width, 3, padding=1), nn.GELU(),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
-            nn.Conv2d(128, 64, 3, padding=1), nn.GELU(),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
-            nn.Conv2d(64, 32, 3, padding=1), nn.GELU(),
+            nn.Conv2d(width, width // 2, 3, padding=1), nn.GELU(),
         )
         self.fuse = nn.Sequential(
-            nn.Conv2d(32 + in_ch, 32, 3, padding=1), nn.GELU(), nn.Conv2d(32, 1, 1)
+            nn.Conv2d(width // 2 + in_ch, width // 2, 3, padding=1), nn.GELU(),
+            nn.Conv2d(width // 2, 1, 1),
         )
 
     def forward(self, tokens: Tensor, image: Tensor) -> Tensor:
@@ -164,7 +168,7 @@ class MultiViewPolicy(nn.Module):
         dim: int = 192,
         depth: int = 6,
         heads: int = 6,
-        heatmap_size: int = 48,
+        heatmap_size: int = 32,
         proprio_dim: int = 7,
     ) -> None:
         super().__init__()
@@ -320,13 +324,54 @@ class MultiViewPolicy(nn.Module):
 
 
 def heatmap_targets_virtual(pos: Tensor, size: int) -> Tensor:
-    """Flat index of the target's projection in each canonical view. (B, V)"""
+    """Fractional (col, row) of the target's projection in each canonical view.
+
+    Returned fractional rather than rounded so the Gaussian target can be
+    centred on the true sub-cell location; rounding first would put a
+    half-cell bias straight into the supervision.
+    """
     centre = torch.tensor(WORKSPACE_CENTRE, device=pos.device, dtype=pos.dtype)
-    idx = []
+    half = WORKSPACE_EXTENT / 2.0
+    out = []
     for view in VIRTUAL_VIEWS:
-        col, row, _, _ = project_to_view(pos, view, centre, WORKSPACE_EXTENT, size)
-        idx.append(row * size + col)
-    return torch.stack(idx, dim=1)
+        au, av, _, _, flip_u = _VIEW_SPEC_LOCAL[view]
+        p = pos - centre
+        u = -p[..., au] if flip_u else p[..., au]
+        v = p[..., av]
+        out.append(torch.stack([(u + half) / WORKSPACE_EXTENT * (size - 1),
+                                (half - v) / WORKSPACE_EXTENT * (size - 1)], dim=-1))
+    return torch.stack(out, dim=1)                                   # (B, V, 2)
+
+
+#: Local alias so the loss does not import the renderer's private table twice.
+_VIEW_SPEC_LOCAL = {k: v for k, v in __import__(
+    "rvt_lerobot.render.virtual", fromlist=["VIEW_SPEC"]).VIEW_SPEC.items()}
+
+
+def gaussian_heatmap_loss(logits: Tensor, uv: Tensor, size: int, sigma: float = 1.0,
+                          valid: Tensor | None = None) -> Tensor:
+    """Cross-entropy against a Gaussian centred on the true sub-cell location.
+
+    A one-hot target at the rounded cell makes the predicted distribution as
+    peaky as the supervision allows, and a soft-argmax over a spike is biased
+    toward the cell centre -- which puts a floor of half a cell (about 9 mm at
+    this resolution) under every method that decodes geometrically, for no
+    reason but the loss. A Gaussian target removes it.
+    """
+    b_v = logits.shape[0]
+    dev = logits.device
+    grid = torch.arange(size, device=dev, dtype=logits.dtype)
+    du = grid[None, :] - uv[:, 0:1]
+    dv = grid[None, :] - uv[:, 1:2]
+    gu = torch.exp(-0.5 * (du / sigma) ** 2)
+    gv = torch.exp(-0.5 * (dv / sigma) ** 2)
+    target = (gv[:, :, None] * gu[:, None, :]).reshape(b_v, -1)
+    target = target / target.sum(-1, keepdim=True).clamp(min=1e-8)
+    ce = -(target * F.log_softmax(logits.reshape(b_v, -1), dim=-1)).sum(-1)
+    if valid is not None:
+        ce = ce * valid.reshape(b_v).to(ce.dtype)
+        return ce.sum() / valid.sum().clamp(min=1)
+    return ce.mean()
 
 
 def heatmap_targets_real(pos: Tensor, K: Tensor, T: Tensor, size: int, image_size: int):
@@ -343,11 +388,10 @@ def heatmap_targets_real(pos: Tensor, K: Tensor, T: Tensor, size: int, image_siz
     u = K[..., 0, 0] * cam[..., 0] / z.clamp(min=1e-3) + K[..., 0, 2]
     r = K[..., 1, 1] * cam[..., 1] / z.clamp(min=1e-3) + K[..., 1, 2]
     scale = size / image_size
-    cu = (u * scale).round().long()
-    cr = (r * scale).round().long()
-    valid = (z > 0.05) & (cu >= 0) & (cu < size) & (cr >= 0) & (cr < size)
-    idx = (cr.clamp(0, size - 1) * size + cu.clamp(0, size - 1))
-    return idx, valid, z
+    cu, cr = u * scale, r * scale
+    valid = (z > 0.05) & (cu >= 0) & (cu <= size - 1) & (cr >= 0) & (cr <= size - 1)
+    uv = torch.stack([cu.clamp(0, size - 1), cr.clamp(0, size - 1)], dim=-1)
+    return uv, valid, z
 
 
 def policy_loss(out: dict, batch: dict, spec: ArmSpec, model: MultiViewPolicy) -> tuple[Tensor, dict]:
@@ -360,18 +404,17 @@ def policy_loss(out: dict, batch: dict, spec: ArmSpec, model: MultiViewPolicy) -
 
     if spec.decode != "regress":
         s = model.heatmap_size
-        logits = out["heatmap_logits"].reshape(-1, s * s)
+        logits = out["heatmap_logits"].reshape(-1, s, s)
         if spec.decode == "orthographic":
-            idx = heatmap_targets_virtual(batch["target_pos"], s).reshape(-1)
-            hm = F.cross_entropy(logits, idx)
+            uv = heatmap_targets_virtual(batch["target_pos"], s).reshape(-1, 2)
+            hm = gaussian_heatmap_loss(logits, uv, s)
         else:
-            idx, valid, z = heatmap_targets_real(
+            uv, valid, z = heatmap_targets_real(
                 batch["target_pos"], batch["K"], batch["T"], s, model.image_size
             )
-            flat_valid = valid.reshape(-1)
             hm = (
-                F.cross_entropy(logits[flat_valid], idx.reshape(-1)[flat_valid])
-                if flat_valid.any()
+                gaussian_heatmap_loss(logits, uv.reshape(-1, 2), s, valid=valid)
+                if valid.any()
                 else logits.sum() * 0.0
             )
             # the per-view depth head is supervised directly; it is the second

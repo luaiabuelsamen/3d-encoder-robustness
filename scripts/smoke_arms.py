@@ -27,7 +27,7 @@ from rvt_lerobot.models.policy import ARMS, MultiViewPolicy, policy_loss  # noqa
 
 IMAGE = 96
 N_EPISODES = 4
-STEPS = 150
+STEPS = 120
 
 
 def main() -> int:
@@ -58,7 +58,7 @@ def main() -> int:
     fails = []
     for name, spec in ARMS.items():
         torch.manual_seed(0)
-        model = MultiViewPolicy(spec, image_size=IMAGE).to(dev)
+        model = MultiViewPolicy(spec, image_size=IMAGE, patch=16).to(dev)
         n_par = sum(p.numel() for p in model.parameters())
         opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
 

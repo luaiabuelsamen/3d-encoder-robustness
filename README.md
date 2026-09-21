@@ -1,107 +1,157 @@
-# rvt-lerobot
+# What does re-rendering actually buy you?
 
-**Bringing RVT-style multi-view transformer policies to the LeRobot ecosystem.**
+**Separating the three mechanisms inside RVT-style 3D robot policies, and
+measuring what each one costs.**
 
-LeRobot ships ACT, Diffusion Policy, VQ-BeT, π0, SmolVLA — all RGB-only,
-dense-action policies. There is no 3D / keyframe-based policy in the family.
-[RVT](https://github.com/NVlabs/RVT) (Robotic View Transformer, CoRL 2023) is
-the canonical one. This repo is a minimal bridge: a MuJoCo SO-ARM100 env with 4
-RGBD cameras, a PerAct/RLBench-format data dumper, and a LeRobot-compatible
-policy wrapper around RVT.
+Jitendra Malik, [October 2025](https://x.com/JitendraMalikCV): *"Many robotics
+papers in the learning era weren't exploiting 3D structure, which IMHO is just
+wasting valuable signal."* He is right, and this repository takes the point
+seriously enough to ask the follow-up question: **exploiting 3D structure how,
+and at what price?**
 
-![hero](assets/virtual_views_hero.png)
+[RVT](https://robotic-view-transformer.github.io/) (Goyal et al., CoRL 2023)
+unprojects RGBD into a world-frame point cloud and re-renders it from *fixed*
+virtual cameras before a transformer ever sees it. It works. The field's
+shorthand for why is "it uses 3D structure" — but that phrase covers three
+separable mechanisms, and nobody has reported which one is doing the work:
 
-> **What you're looking at.** Top row: 4 real RGBD cameras (front, left/right
-> shoulder, wrist) rendered from a single MuJoCo step. Bottom row: 5
-> orthographic *virtual* views reprojected from the fused point cloud. The RVT
-> transformer attends across the bottom row. The reprojection is not learned —
-> it's geometric. The network sees the same canonical viewpoints every time.
+1. **depth as extra signal** — a fourth input channel;
+2. **explicit geometric decoding** — predict a pixel, then push it through known
+   calibration, instead of regressing a coordinate;
+3. **input canonicalisation** — the network's input stops depending on where the
+   real cameras are.
 
-## How RVT works in one paragraph
+This study takes them apart on one task, with one backbone, one training recipe,
+and one output space, and then stresses all of it along three axes that a real
+deployment actually travels.
 
-`RGBD from N real cameras → unproject each to a 3D point cloud in world frame
-→ concatenate → re-render from K = 5 fixed orthographic virtual cameras (front,
-top, left, right, back) → patchify + ViT with cross-view attention → per-pixel
-heatmaps on each virtual view → argmax in 3D gives the next end-effector
-keypose; rotation + gripper open are auxiliary heads.` RVT predicts the *next
-keyframe*, not the next dense action.
+> **Status.** Apparatus complete and self-tested; training and the evaluation
+> grid in progress. Numbers below are filled in from `results/` as they land,
+> and `results/findings.md` is generated, not written — including the
+> comparisons that fail to resolve.
 
-## What's in the box
+---
 
-```
-rvt_lerobot/
-├── envs/so_arm_rvt_env.py        SO-ARM100 + 4 RGBD cameras, extrinsics/intrinsics export
-├── data/rlbench_format.py        PerAct on-disk format writer + keyframe extraction
-├── data/collect.py               Scripted demo collector
-├── visualize/virtual_views.py    PCD fusion + 5 orthographic re-renders (the hero figure)
-└── policy/rvt_policy.py          LeRobot PreTrainedPolicy-shaped wrapper (stub)
-assets/
-├── so_arm_scene/                 MJCF: SO-ARM100 + RLBench camera rig
-└── virtual_views_hero.png        the figure above
-external/RVT/                     upstream NVlabs/RVT clone (training code)
-```
+## The arms
 
-## Quickstart
+Identical transformer, identical capacity, identical optimiser and schedule,
+identical rotation and gripper heads, identical data. Two things vary.
+
+| arm | encoder input | translation decoder | input moves with the cameras? |
+|---|---|---|---|
+| `proprio` | nothing | regress | — |
+| `rgb` | 4 real RGB views | regress | yes |
+| `rgbd` | 4 real RGB+D views | regress | yes |
+| `rgbd_unproj` | 4 real RGB+D views | heatmap → unproject | features yes, output no |
+| `xyz_real` | 4 real RGB+world-XYZ views | heatmap → unproject | features yes, output no |
+| `rvt` | 5 canonical orthographic views | heatmap → orthographic | **no** |
+| `rgb_aug` | `rgb` + camera-pose augmentation | regress | yes |
+| `rvt_aug` | `rvt` + camera-pose augmentation | heatmap → orthographic | no |
+
+`xyz_real` is the arm that makes the comparison sharp. It receives *the same
+world-frame coloured point cloud* as `rvt` and decodes it through *the same*
+explicit geometry. The only difference is which viewpoints the cloud is
+rasterised from — the real cameras' or the canonical ones'. Whatever separates
+those two arms is canonicalisation proper, and nothing else.
+
+`proprio` is not a strawman, it is the load-bearing control: a scripted expert
+is nearly deterministic given the scene, so if joint angles alone predict the
+next keypose well, the task does not test perception and no other row means
+anything.
+
+## The stresses
+
+| axis | what moves | what a policy is told |
+|---|---|---|
+| **θ** — extrinsic shift, recalibrated | cameras move by θ | the true new extrinsics |
+| **ε** — calibration error | nothing moves | extrinsics wrong by ε |
+| **c** — depth noise | nothing moves | σ_z = c·z², plus 1 mm quantisation, edge holes and flying pixels |
+
+θ and ε are usually conflated and they are not the same experiment. θ asks
+whether a representation is *invariant*. ε asks what the representation costs
+when the numbers it trusts are wrong — and it is the common case, because
+extrinsics drift and nobody recalibrates a working cell.
+
+The depth-noise model is not additive Gaussian, which flatters point-cloud
+methods. Stereo depth fails at discontinuities, producing holes *and* flying
+pixels: matches that interpolate between foreground and background and leave
+points hanging in mid-air around every silhouette. Those are not zero-mean, and
+the object here is a 20 mm block.
+
+## Task and metric
+
+SO-101 arm, MuJoCo, pick a randomised block and place it in a randomised
+container. Policies predict the **next keypose** — the RVT output space — from a
+single observation: end-effector translation, 6D rotation, gripper state.
+
+Translation error is the headline because the block is 20 mm across: a
+prediction 20 mm off closes the jaws on air. Errors are also reported split by
+phase, because averaging the two keyposes that decide the task (closing on the
+block, opening over the container) together with nine transit poses that have
+centimetres of slack will hide exactly the effect being looked for.
+
+`scripts/closed_loop.py` converts millimetres into place rates, with the
+demonstration's own keyposes replayed through the identical executor as the
+paired reference.
+
+## Reproducing
 
 ```bash
-# 1) Collect a tiny dataset (PerAct format, 3 episodes)
-MUJOCO_GL=egl PYTHONPATH=. python -m rvt_lerobot.data.collect --num 3 --out data/demos
-
-# 2) Reproject one frame into 5 virtual views (the hero figure)
-PYTHONPATH=. python -m rvt_lerobot.visualize.virtual_views \
-    --episode data/demos/train/put_block_in_box/all_variations/episodes/episode0 \
-    --frame 0 --out virtual_views.png
+make check     # geometry and renderer self-tests -- run these first, always
+make data      # 500 train / 60 val / 120 test demonstrations (22 MB)
+make train     # every arm, every seed, one shared rendered cache
+make grid      # every checkpoint across the stress grid
+make figures   # figures, table, and results/findings.md
 ```
 
-## On-disk format
+`make check` is not a formality. It asserts the geometry against facts known
+independently of the code — the table is a plane at z = 0.09, the block is where
+MuJoCo's segmentation buffer says it is — and it caught three real bugs before
+any model was trained, including one where MuJoCo's antialiasing blended
+segmentation ids along silhouette edges and moved the block's *measured* centroid
+100 mm while the actual block pixels were landing within 1 mm.
 
-Each episode matches what `peract_colab.rlbench.utils.get_stored_demo` expects:
+![virtual views](figures/virtual_views.png)
 
-```
-episodeN/
-├── low_dim_obs.pkl          # list[Observation] with .misc['<cam>_camera_extrinsics' / '_intrinsics' / '_near' / '_far'], .gripper_open, .gripper_pose
-├── variation_number.pkl
-├── variation_descriptions.pkl
-├── front_rgb/{i}.png        front_depth/{i}.png         # depth packed as 24-bit RGB PNG
-├── left_shoulder_rgb/...    left_shoulder_depth/...
-├── right_shoulder_rgb/...   right_shoulder_depth/...
-└── wrist_rgb/...            wrist_depth/...
-```
+*Top: the four real cameras. Bottom: the five canonical orthographic views
+re-rendered from their fused point cloud. The reprojection is geometric, not
+learned. Under a 15° rig perturbation these images move by 1.4 virtual pixels —
+the resampling floor.*
 
-This means the data drops straight into RVT's training pipeline:
+## Design notes worth knowing before you copy anything
 
-```bash
-cd external/RVT
-python train.py task=put_block_in_box dataset.data_folder=../../data/demos
-```
+**Episodes are stored as replayable sim states, not images.** 500 episodes are
+22 MB, and the camera rig becomes a free experimental variable: any condition is
+produced by re-photographing the same episodes, so nothing about a comparison
+changes except the thing under test.
 
-## Path to a real LeRobot contribution
+**One process renders each training condition once and trains every arm from
+it.** Besides the hours saved, it removes a confound: every arm and seed sees
+byte-identical observations, so a gap between arms cannot be a difference in
+which camera jitter they happened to draw.
 
-The policy file is intentionally a stub. To upstream:
+**Everything runs in float32.** Mixed precision would roughly double throughput,
+but the measured quantity is a millimetre offset carried in metre-scale world
+coordinates, and float16's mantissa gives about 3 × 10⁻³ relative precision
+there — the same order as the effects. A numerical artefact that looked like a
+finding would cost more than the time saved.
 
-1. Replace `RVTConfigStub` with a `PreTrainedConfig` subclass registered as `"rvt"`.
-2. Replace `RVTPolicyStub` with a `PreTrainedPolicy` subclass that constructs
-   `rvt.models.rvt_agent.RVTAgent` in `__init__` and delegates `forward` /
-   `select_action` to it.
-3. Add a LeRobot dataset processor that emits the per-camera `point_cloud`
-   tensors RVT expects (unproject from `observation.depths.{cam}` + extrinsics).
-4. Register in `lerobot.policies.factory`.
-
-That's the contribution this scaffolding is shaped for.
-
-## Known limitations
-
-- The scripted demo policy is open-loop joint waypoints — illustrative, not
-  reliably successful. Swap in proper IK or teleop.
-- RVT's training code under `external/RVT/` has heavy deps (CLIP, PyTorch3D for
-  RVT-1, custom CUDA for RVT-2) that don't all install cleanly on Jetson aarch64.
-  The data pipeline + visualizer are dep-light and run anywhere.
-- Keyframe extraction is finite-difference-on-joints, not the true RLBench
-  stopped-buffer heuristic. Good enough for sanity-checking the format.
+**No `PYTHONPATH`.** See `rvt_lerobot/device.py`. This host has two torch
+installs and the shell profile's `PYTHONPATH` is what selects the working one;
+replacing *or* unsetting it silently selects a build whose CUDA runtime is newer
+than the driver, and training quietly completes on the CPU.
 
 ## Credits
 
-- [NVlabs/RVT](https://github.com/NVlabs/RVT) — the model.
-- [peract/peract_colab](https://github.com/peract/peract_colab) — the on-disk
-  format spec.
-- SO-ARM100 model from the LeRobot community.
+- [NVlabs/RVT](https://github.com/NVlabs/RVT) — Goyal, Xu, Guo, Blukis, Chao,
+  Fox. The method this study takes apart.
+- [PerAct](https://peract.github.io/) — the keypose formulation and on-disk
+  format.
+- The physics scene, IK and scripted expert are vendored from a sibling project
+  of the author's, where they were validated at 78% / 60% pick and place; they
+  re-measure at 9/10 on the nominal scene here.
+- Zhou et al., CVPR 2019, for the 6D rotation encoding.
+- The framing question is Jitendra Malik's, and the 3D-reconstruction tradition
+  he was pointing at is the work of human researchers over four decades —
+  photogrammetry, multi-view geometry, Hartley & Zisserman, and everything
+  built on them.

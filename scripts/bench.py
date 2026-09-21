@@ -80,11 +80,17 @@ def main() -> None:
     cache = ConditionCache(render_condition(scene, eps, samples, Condition()), device=device)
     print(f"{cache.n} samples cached at {a.image}px on {device}\n")
 
-    print(f"{'arm':12s} {'patch':>5s} {'dim':>4s} {'dep':>4s} {'tok':>5s} "
+    print(f"{'arm':12s} {'patch':>5s} {'dim':>4s} {'dep':>4s} {'tok':>5s} {'bs':>4s} "
           f"{'total':>8s} {'data':>7s} {'images':>7s} {'fwd':>7s} {'bwd':>7s}")
     for arm in a.arms.split(","):
         spec = ARMS[arm]
-        for patch, dim, depth in ((12, 192, 6), (16, 192, 6), (16, 192, 4), (16, 128, 4)):
+        # Two knobs, and a batch sweep, because a step this small on this GPU is
+        # more likely to be bound by kernel-launch latency than by arithmetic --
+        # in which case a bigger batch is nearly free and is the whole answer.
+        for patch, dim, depth, bs in (
+            (12, 192, 6, a.batch), (16, 192, 6, a.batch), (16, 192, 4, a.batch),
+            (16, 192, 6, a.batch * 2), (16, 192, 6, a.batch * 4),
+        ):
             torch.manual_seed(0)
             model = MultiViewPolicy(
                 spec, image_size=a.image, patch=patch, dim=dim, depth=depth,
@@ -93,12 +99,13 @@ def main() -> None:
             g = a.image // patch
             tok = spec.n_views * g * g + 2
             try:
-                total, d, im, fw, bw = time_step(model, cache, spec, a.batch, a.image, device)
+                total, d, im, fw, bw = time_step(model, cache, spec, bs, a.image, device)
             except RuntimeError as e:
-                print(f"{arm:12s} {patch:5d} {dim:4d} {depth:4d} {tok:5d}  FAILED {e}")
+                print(f"{arm:12s} {patch:5d} {dim:4d} {depth:4d} {tok:5d} {bs:4d}  FAILED {e}")
                 continue
-            print(f"{arm:12s} {patch:5d} {dim:4d} {depth:4d} {tok:5d} "
-                  f"{total:7.1f}ms {d:6.1f}ms {im:6.1f}ms {fw:6.1f}ms {bw:6.1f}ms", flush=True)
+            print(f"{arm:12s} {patch:5d} {dim:4d} {depth:4d} {tok:5d} {bs:4d} "
+                  f"{total:7.1f}ms {d:6.1f}ms {im:6.1f}ms {fw:6.1f}ms {bw:6.1f}ms "
+                  f"{total/bs:6.2f}ms/sample", flush=True)
             del model
             if device == "cuda":
                 torch.cuda.empty_cache()

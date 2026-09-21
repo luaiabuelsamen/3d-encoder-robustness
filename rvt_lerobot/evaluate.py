@@ -48,7 +48,7 @@ def evaluate(
     """Run a trained arm over a rendered condition and summarise the errors."""
     model.eval()
     n = cache.n if limit is None else min(limit, cache.n)
-    errs, rots, grips = [], [], []
+    errs, rots, grips, events = [], [], [], []
     for start in range(0, n, batch_size):
         idx = np.arange(start, min(start + batch_size, n))
         batch = cache.batch(idx)
@@ -59,11 +59,22 @@ def evaluate(
         grips.append(
             ((out["grip_logit"] > 0).float() == batch["target_grip"]).float().cpu()
         )
+        events.append(batch["event"].cpu())
     model.train()
     e = torch.cat(errs).numpy()
     r = torch.cat(rots).numpy()
     g = torch.cat(grips).numpy()
+    ev = torch.cat(events).numpy()
+    # Per-phase translation error. Averaging over a whole trajectory hides the
+    # two keyposes that decide the task -- closing on a 20 mm block and opening
+    # over the container -- among nine transit poses with centimetres of slack.
+    phases = {}
+    for code, name in ((1, "grasp"), (2, "release"), (0, "transit")):
+        m = ev == code
+        phases[f"trans_mm_median_{name}"] = float(np.median(e[m]) * 1000) if m.any() else float("nan")
+        phases[f"n_{name}"] = int(m.sum())
     return {
+        **phases,
         "n": int(len(e)),
         "trans_mm_mean": float(e.mean() * 1000),
         "trans_mm_median": float(np.median(e) * 1000),
