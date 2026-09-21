@@ -1,13 +1,16 @@
 __pycache__/
 *.pyc
 
-# Anchored to the repository root on purpose. An unanchored `data/` also matches
-# `rvt_lerobot/data/`, which is package source, and silently kept the dataset
-# builder, the condition renderer and the batch builder out of every commit.
+# Datasets and checkpoints are regenerable; results are not.
+# `/runs/` was anchored to the root, so runs_cl/, runs_cl6/ and runs_12k/ were
+# tracked and five model.pt files reached the history. The glob covers them.
 /data/
-/runs/
-/results/*.json
+runs*/
 *.npz
 *.npy
 *.rrd
 external/RVT/
+
+# results/*.json is deliberately NOT ignored: those files are the findings,
+# they are a few hundred kB, and without them the figures and the report cannot
+# be regenerated or checked by anyone else.

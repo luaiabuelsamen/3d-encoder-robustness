@@ -1,0 +1,38 @@
+[
+  {
+    "noise_mm": 0.0,
+    "picked": 0.88,
+    "placed": 0.88,
+    "n": 25
+  },
+  {
+    "noise_mm": 2.0,
+    "picked": 0.88,
+    "placed": 0.88,
+    "n": 25
+  },
+  {
+    "noise_mm": 5.0,
+    "picked": 0.88,
+    "placed": 0.88,
+    "n": 25
+  },
+  {
+    "noise_mm": 10.0,
+    "picked": 0.84,
+    "placed": 0.8,
+    "n": 25
+  },
+  {
+    "noise_mm": 20.0,
+    "picked": 0.72,
+    "placed": 0.68,
+    "n": 25
+  },
+  {
+    "noise_mm": 40.0,
+    "picked": 0.4,
+    "placed": 0.32,
+    "n": 25
+  }
+]

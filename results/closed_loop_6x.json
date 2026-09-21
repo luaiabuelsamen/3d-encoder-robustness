@@ -1,0 +1,32 @@
+[
+ {
+  "arm": "scripted_expert",
+  "seed": -1,
+  "theta": 0.0,
+  "eps": 0.0,
+  "noise": 0.0,
+  "n": 20,
+  "picked": 1.0,
+  "placed": 0.95
+ },
+ {
+  "arm": "oracle_keyposes",
+  "seed": -1,
+  "theta": 0.0,
+  "eps": 0.0,
+  "noise": 0.0,
+  "n": 20,
+  "picked": 1.0,
+  "placed": 0.85
+ },
+ {
+  "arm": "dp3_pcd",
+  "seed": 0,
+  "theta": 0.0,
+  "eps": 0.0,
+  "noise": 0.0,
+  "n": 20,
+  "picked": 0.2,
+  "placed": 0.15
+ }
+]
