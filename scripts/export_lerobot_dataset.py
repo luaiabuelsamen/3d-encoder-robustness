@@ -50,6 +50,35 @@ from rvt_lerobot.vendor.so101_expert import ScriptedExpert  # noqa: E402
 
 TASK = "Pick up the block and place it in the container."
 
+#: Not the study's NOMINAL_RIG. That rig sits 0.6 m out and only 0.3 m up, a
+#: depression angle of about 27 degrees, so it spends the lower third of every
+#: frame on floor beyond the table and pushes the workspace to the top. This pose
+#: is closer and higher and renders no background at all: over the same scene,
+#: 10% of pixels hit the far plane from the nominal rig and 0% from here.
+#:
+#: It has to be re-applied inside the capture hook, not once before the loop.
+#: `PickScene.reset()` calls `mj_resetDataKeyframe`, which restores mocap body
+#: positions along with everything else, so any rig set beforehand is silently
+#: wiped -- and `ScriptedExpert.run()` calls `reset()` itself, so even
+#: re-applying per episode before `run()` is too early. Measured directly:
+#:
+#:     after __init__            camera xpos = [ 0.   -0.85  0.45]
+#:     after set_rig             camera xpos = [ 0.   -0.60  0.60]
+#:     after scene.reset()       camera xpos = [ 0.   -0.85  0.45]   <- wiped
+#:
+#: Two attempts at this fix produced datasets that looked perfectly plausible
+#: and were shot from the wrong camera, because nothing anywhere reports a
+#: camera silently moving back. Applying it in the hook is the only placement
+#: that cannot be undone by a reset happening somewhere else.
+FIGURE_RIG_EYE = (0.00, -0.60, 0.60)
+FIGURE_RIG_TARGET = (0.0, -0.25, 0.08)
+
+
+def apply_rig(scene, camera: str) -> None:
+    scene.set_rig({
+        camera: R.CameraPose(np.array(FIGURE_RIG_EYE), np.array(FIGURE_RIG_TARGET))
+    })
+
 
 def features(camera: str, size: int) -> dict:
     return {
@@ -97,7 +126,7 @@ def main() -> int:
         shutil.rmtree(a.root)
 
     scene = MultiCamScene(seed=7, image_size=a.image, cameras=(a.camera,))
-    scene.set_rig(R.NOMINAL_RIG)
+    apply_rig(scene, a.camera)
     expert = ScriptedExpert(scene.scene)
     intrinsics = scene._K[a.camera].astype(np.float32)
 
@@ -119,6 +148,9 @@ def main() -> int:
         frames: list[dict] = []
 
         def hook(s, _frames=frames) -> None:
+            # Re-aim before every capture: reset() wipes the mocap rig and the
+            # expert resets internally. See FIGURE_RIG_EYE.
+            apply_rig(scene, a.camera)
             obs = scene.capture()[a.camera]
             _frames.append({
                 "observation.state": s.data.qpos[:6].astype(np.float32).copy(),
