@@ -1,22 +1,19 @@
-"""Figure for huggingface/lerobot#4696: what the depth path actually produces.
+"""Figure for huggingface/lerobot#4696: depth becomes recognisable 3D geometry.
 
-Drawn from the recorded LeRobotDataset and the pull request's own processor
-step, not from this study's internal renderer, so every panel is the data a
-reviewer would get by running the documented commands.
+Everything here comes from a LeRobotDataset recorded through the real
+`add_frame` / `save_episode` path and is unprojected by the pull request's own
+processor step, so a reviewer sees what the documented commands produce rather
+than an illustration of them.
 
-Panel 4 is the failure this PR now raises on. `LeRobotDataset` dequantises
-depth to millimetres by default while the step works in metres, so the obvious
-wiring of the two is off by a thousand: every point lands far outside the
-workspace crop, and a frame with no surviving points is returned as zeros by
-design, so that a dropped depth frame cannot kill a training run. What reaches
-the encoder is 1024 copies of a single location with zero extent on every axis.
-The policy trains on that and no metric moves. It is reproduced here through the
-public API, with `max_depth` raised so the new magnitude check does not fire.
+The point of the figure is that the last two panels are the *same* 1024 points
+seen from two directions. A point cloud drawn once, flat, is indistinguishable
+from noise; rotated, the container, the table and the arm are obviously solid
+objects sitting in the right places. That is the difference between claiming
+the geometry is right and showing it.
 
-An earlier draft of this figure compared a cropped and an uncropped cloud. That
-was dropped: this camera sees almost nothing but the workspace, so the two were
-the same picture at different axis scales, and the caption claimed a difference
-the image did not show.
+Colour is real RGB carried through with `with_colour=True`, which is the pull
+request's 6-channel path, so the panels are also a check on it: if the colour
+were being attached to the wrong points, these renders would be confetti.
 """
 
 from __future__ import annotations
@@ -30,119 +27,115 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from mpl_toolkits.mplot3d import Axes3D  # noqa: E402,F401
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset  # noqa: E402
 from lerobot.processor.depth_processor import DepthToPointCloudStep  # noqa: E402
 
-BG = "#111318"
-FG = "#e8e8e8"
+BG = "#0d0f14"
+FG = "#f0f0f0"
 MUTED = "#8b93a1"
 
 
-def cloud_panel(ax, cloud: np.ndarray, title: str, sub: str, *, lim: float | None = None,
-                crop_box: bool = False):
-    """Look down the camera's x-z plane: horizontal position against depth."""
-    x, z = cloud[:, 0], cloud[:, 2]
-    colour = cloud[:, 1]  # height, so the table reads as one band
-    ax.scatter(x, z, c=colour, s=6, cmap="viridis", linewidths=0, alpha=0.95)
-    if lim is not None:
-        ax.set_xlim(-lim, lim)
-        ax.set_ylim(-lim, lim)
-    if crop_box:
-        # The workspace cube maps to [-1, 1] after normalisation, so its edge is
-        # a unit square here. Drawing it makes "outside the crop" literal.
-        ax.add_patch(
-            plt.Rectangle((-1, -1), 2, 2, fill=False, ls="--", lw=1.0,
-                          edgecolor="#5a6472")
-        )
-        ax.annotate("workspace crop", xy=(0.0, 1.0), xytext=(0.0, 1.12),
-                    ha="center", color="#5a6472", fontsize=7)
-    ax.set_title(title, color=FG, fontsize=10, pad=8)
-    ax.set_xlabel(sub, color=MUTED, fontsize=8)
+def style(ax, title: str, sub: str) -> None:
+    ax.set_title(title, color=FG, fontsize=12, pad=10)
+    ax.set_xlabel(sub, color=MUTED, fontsize=9, labelpad=8)
+
+
+def cloud3d(ax, cloud: np.ndarray, elev: float, azim: float, title: str, sub: str) -> None:
+    """Draw the cloud as 3D geometry, coloured by the RGB carried on each point."""
+    xyz, rgb = cloud[:, :3], np.clip(cloud[:, 3:6], 0, 1)
+    # World-ish orientation for reading: x right, z into the screen, y up.
+    ax.scatter(xyz[:, 0], xyz[:, 2], -xyz[:, 1], c=rgb, s=11, depthshade=False, linewidths=0)
+    ax.view_init(elev=elev, azim=azim)
     ax.set_facecolor(BG)
-    ax.tick_params(colors=MUTED, labelsize=7)
-    for spine in ax.spines.values():
-        spine.set_color("#2a2f3a")
+    ax.set_box_aspect((1, 1, 1))
+    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+        axis.set_pane_color((0.05, 0.06, 0.08, 1.0))
+        axis.line.set_color("#2a2f3a")
+        axis.set_tick_params(colors=MUTED, labelsize=6)
+    # Numeric ticks on a normalised cloud carry no information a reader needs
+    # and compete with the geometry, which is the whole point of the panel.
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_zticklabels([])
+    ax.grid(False)
+    ax.set_title(title, color=FG, fontsize=12, pad=4)
+    ax.text2D(0.5, -0.04, sub, transform=ax.transAxes, ha="center",
+              color=MUTED, fontsize=9)
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--root", type=pathlib.Path, default=pathlib.Path("data/lerobot_rgbd"))
+    p.add_argument("--root", type=pathlib.Path, default=pathlib.Path("data/lerobot_rgbd_hires"))
     p.add_argument("--repo-id", default="local/so101-pick-rgbd")
     p.add_argument("--camera", default="front")
-    p.add_argument("--frame", type=int, default=120)
+    p.add_argument("--frame", type=int, default=95)
+    p.add_argument("--points", type=int, default=3000)
     p.add_argument("--out", type=pathlib.Path, default=pathlib.Path("figures/dp3_pipeline.png"))
     a = p.parse_args()
 
     dataset = LeRobotDataset(a.repo_id, root=a.root)
     item = dataset[a.frame]
     depth_key = f"observation.images.{a.camera}_depth"
-    rgb = item[f"observation.images.{a.camera}"].permute(1, 2, 0).numpy()
+    rgb_key = f"observation.images.{a.camera}"
+    rgb = item[rgb_key].permute(1, 2, 0).numpy()
     depth = item[depth_key]
-    intrinsics = item[f"observation.intrinsics.{a.camera}"]
-    observation = {depth_key: depth, f"observation.intrinsics.{a.camera}": intrinsics}
 
-    workspace = dict(workspace_centre=(0.0, 0.0, 0.67), workspace_extent=0.6)
-    correct = DepthToPointCloudStep(
-        num_points=1024, frame="camera", seed=0, depth_scale=1e-3, **workspace
-    ).observation(dict(observation))
-    # The historical silent failure: millimetres unprojected as metres. max_depth
-    # is raised only so the guard added in this PR does not fire, which is the
-    # whole point -- without the guard this is what a user would have trained on.
-    mis_scaled = DepthToPointCloudStep(
-        num_points=1024, frame="camera", seed=0, depth_scale=1.0, max_depth=3000.0, **workspace
-    ).observation(dict(observation))
+    observation = {
+        depth_key: depth,
+        rgb_key: item[rgb_key],
+        f"observation.intrinsics.{a.camera}": item[f"observation.intrinsics.{a.camera}"],
+    }
+    step = DepthToPointCloudStep(
+        num_points=a.points,
+        frame="camera",
+        with_colour=True,          # the PR's 6-channel path
+        seed=0,
+        depth_scale=1e-3,          # LeRobotDataset returns millimetres
+        workspace_centre=(0.0, 0.0, 0.62),
+        workspace_extent=0.7,
+    )
+    cloud = step.observation(dict(observation))["observation.pointcloud"].numpy()
 
-    fig, axes = plt.subplots(1, 4, figsize=(16.5, 4.4))
+    fig = plt.figure(figsize=(19, 5.6))
     fig.patch.set_facecolor(BG)
 
-    axes[0].imshow(np.clip(rgb, 0, 1))
-    axes[0].set_title("1. RGB", color=FG, fontsize=10, pad=8)
-    axes[0].set_xlabel("what a 2D policy sees", color=MUTED, fontsize=8)
-    axes[0].set_xticks([])
-    axes[0].set_yticks([])
+    ax0 = fig.add_subplot(1, 4, 1)
+    ax0.imshow(np.clip(rgb, 0, 1))
+    ax0.set_xticks([])
+    ax0.set_yticks([])
+    style(ax0, "1. RGB", "what a 2D policy sees")
 
-    d = depth.squeeze().numpy() / 1000.0  # LeRobotDataset returns millimetres
-    valid = d > 0.05
-    shown = np.where(valid, d, np.nan)
-    im = axes[1].imshow(shown, cmap="magma")
-    axes[1].set_title("2. depth, as LeRobot stores it", color=FG, fontsize=10, pad=8)
-    axes[1].set_xlabel("12-bit lossless, dequantised on read", color=MUTED, fontsize=8)
-    axes[1].set_xticks([])
-    axes[1].set_yticks([])
-    cb = fig.colorbar(im, ax=axes[1], fraction=0.046)
+    ax1 = fig.add_subplot(1, 4, 2)
+    d = depth.squeeze().numpy() / 1000.0
+    im = ax1.imshow(np.where(d > 0.05, d, np.nan), cmap="magma")
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    style(ax1, "2. depth, as LeRobot stores it", "12-bit lossless, dequantised on read")
+    cb = fig.colorbar(im, ax=ax1, fraction=0.046)
     cb.ax.tick_params(colors=MUTED, labelsize=7)
     cb.set_label("metres", color=MUTED, fontsize=8)
 
-    good = correct["observation.pointcloud"].numpy()
-    bad = mis_scaled["observation.pointcloud"].numpy()
-    cloud_panel(axes[2], good, "3. point cloud  (what DP3 conditions on)",
-                "1024 points, cropped and normalised", lim=1.3, crop_box=True)
-    cloud_panel(axes[3], bad, "4. the same call, depth read as metres",
-                "outside the crop \u2192 one degenerate point", lim=2.7, crop_box=True)
-    # Mark it: a single dark dot on a dark ground is easy to miss, and the whole
-    # panel is the claim that there is exactly one.
-    axes[3].scatter(bad[0, 0], bad[0, 2], s=90, facecolors="none",
-                    edgecolors="#ff6b6b", linewidths=1.4, zorder=5)
-    unique = len(np.unique(np.round(bad, 6), axis=0))
-    axes[3].annotate(
-        f"all 1024 points collapse to {unique} location\nzero extent on every axis",
-        xy=(0.5, 0.15), xycoords="axes fraction", ha="center",
-        color="#ff6b6b", fontsize=9,
-    )
+    ax2 = fig.add_subplot(1, 4, 3, projection="3d")
+    cloud3d(ax2, cloud, elev=22, azim=-72, title="3. observation.pointcloud",
+            sub=f"{a.points} points, cropped and normalised")
+    ax3 = fig.add_subplot(1, 4, 4, projection="3d")
+    cloud3d(ax3, cloud, elev=58, azim=-20, title="4. the same points, rotated",
+            sub="solid objects in the right places, not a depth image")
 
     fig.suptitle(
-        "lerobot#4696  —  observation.images.{cam}_depth  →  observation.pointcloud, "
-        "via DepthToPointCloudStep",
-        color=FG, fontsize=11.5,
+        "lerobot#4696   observation.images.{cam}_depth  →  observation.pointcloud"
+        "   via DepthToPointCloudStep",
+        color=FG, fontsize=13.5, y=0.98,
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.02, 1, 0.94))
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(a.out, dpi=170, facecolor=BG)
+    fig.savefig(a.out, dpi=150, facecolor=BG)
     print(f"wrote {a.out}")
-    print(f"  correct:    max |coord| {np.abs(good).max():.2f}  (1.0 = crop edge)")
-    print(f"  mis-scaled: {len(np.unique(np.round(bad, 6), axis=0))} unique point(s), "
-          f"extent {np.round(bad.max(0) - bad.min(0), 4)}")
+    print(f"  cloud {cloud.shape}, xyz range "
+          f"{np.round(cloud[:, :3].min(0), 2)} to {np.round(cloud[:, :3].max(0), 2)}")
+    print(f"  colour range {cloud[:, 3:6].min():.2f} to {cloud[:, 3:6].max():.2f}")
     return 0
 
 
