@@ -121,6 +121,22 @@ def main() -> int:
                    default=pathlib.Path("results/dp3_vs_dp.json"))
     a = p.parse_args()
 
+    # Record which dataset produced these curves. Aggregating across seed files
+    # is only meaningful while they all describe the same data, and that is not
+    # automatic: re-recording the dataset and re-running the seeds left one
+    # stale file on disk from the previous recording, and the aggregate silently
+    # mixed two seeds of new data with one of old. Nothing about a stale JSON
+    # looks wrong. The fingerprint makes the mismatch loud instead.
+    info = json.loads((a.root / "meta" / "info.json").read_text())
+    dataset_id = {
+        "root": str(a.root),
+        "total_frames": info.get("total_frames"),
+        "total_episodes": info.get("total_episodes"),
+        "recorded": (a.root / "meta" / "info.json").stat().st_mtime,
+    }
+    print(f"dataset: {dataset_id['total_episodes']} episodes, "
+          f"{dataset_id['total_frames']} frames")
+
     curves = {}
     for arm in a.arms.split(","):
         torch.manual_seed(a.seed)
@@ -165,7 +181,7 @@ def main() -> int:
                                     "seconds": time.time() - t0})
                     print(f"  step {done:5d}  loss {float(loss):7.4f}  "
                           f"[{time.time()-t0:.0f}s]", flush=True)
-        curves[arm] = {"params": n_par, "history": history}
+        curves[arm] = {"params": n_par, "history": history, "dataset": dataset_id}
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(curves, indent=2))
 
